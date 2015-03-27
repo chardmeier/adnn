@@ -4,7 +4,7 @@
 #include <adept.h>
 
 template<class ActivationFunction,class A = adept::aReal>
-class Net;
+class net_3layer;
 
 template<class A>
 struct ad_types;
@@ -29,7 +29,7 @@ struct value_functor {
 	}
 };
 
-struct Sigmoid {
+struct sigmoid {
 	template<class F>
 	struct functor {
 		typedef F result_type;
@@ -39,7 +39,7 @@ struct Sigmoid {
 	};
 };
 
-struct QuadraticLoss {
+struct quadratic_loss {
 	template<class T>
 	struct functor {
 		typedef typename T::float_type result_type;
@@ -51,7 +51,7 @@ struct QuadraticLoss {
 };
 
 template<class N, class Loss>
-class NetWrapper {
+class net_wrapper {
 public:
 	typedef typename N::float_type float_type;
 	typedef typename N::template input_type<float_type> input_type;
@@ -71,7 +71,7 @@ private:
 	loss_type loss_;
 
 public:
-	NetWrapper(const net_type &net, const loss_type &loss) :
+	net_wrapper(const net_type &net, const loss_type &loss) :
 		net_(net), loss_(loss) {}
 
 	template<class OutputType>
@@ -79,15 +79,15 @@ public:
 };
 
 template<class N, class Loss>
-NetWrapper<N,Loss> wrap_net(const N &net, const Loss &loss) {
+net_wrapper<N,Loss> wrap_net(const N &net, const Loss &loss) {
 	typedef typename N::template output_type<typename N::float_type> otype;
 	typedef typename N::template output_type<typename N::afloat_type> aotype;
-	return NetWrapper<N,Loss>(net, typename Loss::template functor<aotype>());
+	return net_wrapper<N,Loss>(net, typename Loss::template functor<aotype>());
 }
 
 template<class N, class Loss>
 template<class OutputType>
-typename NetWrapper<N,Loss>::float_type NetWrapper<N,Loss>::operator()(const weight_type &W, const input_type &inp,
+typename net_wrapper<N,Loss>::float_type net_wrapper<N,Loss>::operator()(const weight_type &W, const input_type &inp,
 		const OutputType &targets, weight_type &grad) const {
 	adept::Stack stack;
 	aweight_type aW(W);
@@ -105,7 +105,7 @@ typename NetWrapper<N,Loss>::float_type NetWrapper<N,Loss>::operator()(const wei
 
 
 template<class ActivationFunction,class A>
-class Net {
+class net_3layer {
 public:
 	typedef A afloat_type;
 	typedef typename ad_types<A>::float_type float_type;
@@ -153,7 +153,7 @@ public:
 
 template<class ActivationFunction, class A>
 template<class FF>
-typename Net<ActivationFunction,A>::template output_type<FF> Net<ActivationFunction,A>::operator()(const weight_type<FF> &w, const input_type<FF> &inp) const {
+typename net_3layer<ActivationFunction,A>::template output_type<FF> net_3layer<ActivationFunction,A>::operator()(const weight_type<FF> &w, const input_type<FF> &inp) const {
 	typedef typename ActivationFunction::template functor<afloat_type> Activation;
 
 	const auto &p1 = inp * w.w1;
@@ -164,12 +164,12 @@ typename Net<ActivationFunction,A>::template output_type<FF> Net<ActivationFunct
 }
 
 int main() {
-	typedef Net<Sigmoid> net_type;
-	typedef NetWrapper<net_type,QuadraticLoss> wrap_type;
+	typedef net_3layer<sigmoid> net_type;
+	typedef net_wrapper<net_type,quadratic_loss> wrap_type;
 	typedef net_type::float_type flt;
 
 	net_type net;
-	wrap_type wrap = wrap_net(net, QuadraticLoss());
+	wrap_type wrap = wrap_net(net, quadratic_loss());
 
 	const std::size_t inpsize = 4;
 	const std::size_t hidsize = 4;
