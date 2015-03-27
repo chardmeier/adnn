@@ -3,7 +3,7 @@
 #include <Eigen/Core>
 #include <adept.h>
 
-template<class ActivationFunction,class F = adept::Real,class A = adept::aReal>
+template<class ActivationFunction,class A = adept::aReal>
 class Net;
 
 template<class A>
@@ -104,11 +104,11 @@ typename NetWrapper<N,Loss>::float_type NetWrapper<N,Loss>::operator()(const wei
 }
 
 
-template<class ActivationFunction,class F,class A>
+template<class ActivationFunction,class A>
 class Net {
 public:
-	typedef F float_type;
 	typedef A afloat_type;
+	typedef typename ad_types<A>::float_type float_type;
 
 	template<class FF>
 	struct input_type : public Eigen::Matrix<FF,Eigen::Dynamic,Eigen::Dynamic> {
@@ -151,19 +151,15 @@ public:
 	output_type<FF> operator()(const weight_type<FF> &W, const input_type<FF> &inp) const;
 };
 
-template<class ActivationFunction, class F, class A>
+template<class ActivationFunction, class A>
 template<class FF>
-typename Net<ActivationFunction,F,A>::template output_type<FF> Net<ActivationFunction,F,A>::operator()(const weight_type<FF> &w, const input_type<FF> &inp) const {
+typename Net<ActivationFunction,A>::template output_type<FF> Net<ActivationFunction,A>::operator()(const weight_type<FF> &w, const input_type<FF> &inp) const {
 	typedef typename ActivationFunction::template functor<afloat_type> Activation;
 
-	std::cerr << "w1:\n" << w.w1.unaryExpr(value_functor<FF>()) << '\n';
-	std::cerr << "w2:\n" << w.w2.unaryExpr(value_functor<FF>()) << '\n';
 	const auto &p1 = inp * w.w1;
 	const auto &a1 = p1.unaryExpr(Activation());
-	std::cerr << "a1:\n" << a1.unaryExpr(value_functor<FF>()) << '\n';
 	const auto &p2 = a1 * w.w2;
 	const auto &out = p2.unaryExpr(Activation());
-	std::cerr << "out:\n" << out.unaryExpr(value_functor<FF>()) << '\n';
 	return out;
 }
 
