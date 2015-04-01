@@ -1,0 +1,166 @@
+#include <cmath>
+#include <functional>
+#include <iostream>
+#include <limits>
+#include <vector>
+
+#include "3layer.h"
+
+template<class Net>
+struct nnopt_results {
+	typedef typename Net::float_type float_type;
+	typedef typename Net::template weight_type<float_type> weight_type;
+
+	nnopt_results(const Net &net) :
+		best_weights(net) {}
+
+	std::vector<float_type> trainerr;
+	std::vector<float_type> valerr;
+	float_type best_valerr;
+	weight_type best_weights;
+};
+
+template<class Net>
+class nnopt {
+public:
+	typedef typename Net::float_type float_type;
+	typedef typename Net::template weight_type<float_type> weight_type;
+
+private:
+	int nsteps_;
+	std::size_t batchsize_;
+	weight_type init_weights_;
+	float_type initial_learning_rate_;
+	float_type momentum_;
+	float_type l2reg_;
+
+public:
+	nnopt(const Net &net);
+
+	template<class Loss,class TrainingDataset,class ValidationDataset>
+	nnopt_results<Net> train(const Net &net, const Loss &loss, const TrainingDataset &trainset, const ValidationDataset &valset) const;
+};
+
+template<class Net>
+nnopt<Net>::nnopt(const Net &net) :
+		nsteps_(300), batchsize_(50), init_weights_(net), initial_learning_rate_(.001), momentum_(.9), l2reg_(.001) {
+	init_weights_.init_normal(.01);
+}
+
+template<class Net>
+template<class Loss,class TrainingDataset,class ValidationDataset>
+nnopt_results<Net> nnopt<Net>::train(const Net &net, const Loss &loss, const TrainingDataset &trainset, const ValidationDataset &valset) const {
+	const float_type ONE = 1;
+	const float_type ZERO = 0;
+	const float_type TINY = 1e-15;
+
+	nnopt_results<Net> results(net);
+
+	net_wrapper<Net,Loss> wrapped_net(net, loss);
+
+	weight_type ww(init_weights_);
+
+	weight_type gain(net, ONE);
+	weight_type weight_change(net, ZERO);
+	weight_type rms(net, ONE);
+	weight_type prev_grad(net, ZERO);
+
+	float_type alpha = initial_learning_rate_;
+
+	results.best_valerr = std::numeric_limits<float_type>::infinity();
+	
+	bool first_iteration = true;
+	for(int i = 0; i < nsteps_; i++) {
+		float_type err = 0;
+		for(auto batchit = trainset.batch_begin(batchsize_); batchit != trainset.batch_end(); ++batchit) {
+			weight_type grad(net, ZERO);
+			err += wrapped_net(ww, batchit->inputs(), batchit->targets(), grad);
+			grad.array() += l2reg_ * ww.array();
+			//std::cerr << "grad.w1:\n" << grad.w1() << std::endl;
+			rms.array() = float_type(.9) * rms.array() + float_type(.1) * grad.array() * grad.array();
+			//std::cerr << "rms.w1:\n" << rms.w1() << std::endl;
+			weight_type normgrad(net);
+			normgrad.array() = grad.array() / (rms.array().sqrt() + TINY);
+			//std::cerr << "normgrad.w1:\n" << normgrad.w1() << std::endl;
+			weight_change.array() = momentum_ * weight_change.array() - alpha * gain.array() * normgrad.array();
+			ww.array() += weight_change.array();
+			//std::cerr << "weight_change.w1:\n" << weight_change.w1() << std::endl;
+			//std::cerr << "- ww.w1:\n" << ww.w1() << std::endl;
+
+			if(!first_iteration) {
+				std::reference_wrapper<bool(float_type)> sign(std::signbit);
+				gain.array() = 
+					(grad.array().unaryExpr(sign) == prev_grad.array().unaryExpr(sign)).
+					select(gain.array() + float_type(.05), float_type(.95) * gain.array());
+			} else
+				first_iteration = false;
+
+			prev_grad = grad;
+		}
+		results.trainerr.push_back(err);
+
+		const auto &valout = net(ww, valset.inputs());
+		//std::cerr << "ww.w1\n" << ww.w1() << "\nvalout:\n" << valout.matrix() << std::endl;
+		results.valerr.push_back(evaluate_loss(loss, valout, valset.targets())); 
+		if(results.valerr.back() < results.best_valerr) {
+			results.best_valerr = results.valerr.back();
+			results.best_weights = ww;
+		}
+
+		std::cout << i << " (" << alpha << "): Training error: " << results.trainerr.back() <<
+			", validation error: " << results.valerr.back() << std::endl;
+	}
+
+	return results;
+}
+
+template<class Derived1,class Derived2>
+auto precision_recall(const Eigen::MatrixBase<Derived1> &pred, const Eigen::MatrixBase<Derived2> &gold);
+
+template<class Derived1,class Derived2>
+auto precision_recall(const Eigen::MatrixBase<Derived1> &pred, const Eigen::MatrixBase<Derived2> &gold) {
+	typedef typename Derived1::Scalar F;
+	const auto &hardpred = (pred.cwiseEqual(pred.rowwise().maxCoeff().replicate(1, pred.cols()))).template cast<F>();
+	const auto &match = (hardpred.array() * gold.array()).colwise().sum();
+	Eigen::Array<F,3,Eigen::Dynamic> pr(3, pred.cols());
+	pr.row(0) = match / hardpred.array().colwise().sum();
+	pr.row(1) = match / gold.array().colwise().sum();
+	pr.row(2) = 2 * pr.row(0) * pr.row(1) / (pr.row(0) + pr.row(1));
+	return pr;
+}
+
+int main() {
+	typedef net_3layer<boost::fusion::vector<sigmoid,softmax> > net_type;
+
+	net_type net(7, 100, 3);
+	crossentropy_loss loss;
+
+	net_type::dataset data;
+
+	#include "seeds.data"
+
+	std::size_t split1 = std::floor(.6 * data.nitems());
+	std::size_t split2 = std::floor(.8 * data.nitems());
+
+	data.shuffle();
+	const auto &trainset = data.subset(0, split1);
+	const auto &valset = data.subset(split1, split2);
+	const auto &testset = data.subset(split1, data.nitems());
+	
+	nnopt<net_type> opt(net);
+	nnopt_results<net_type> res = opt.train(net, loss, trainset, valset);
+
+	std::cout << "Training error: ";
+	std::copy(res.trainerr.begin(), res.trainerr.end(), std::ostream_iterator<net_type::float_type>(std::cout, " "));
+	std::cout << "\nValidation error: ";
+	std::copy(res.valerr.begin(), res.valerr.end(), std::ostream_iterator<net_type::float_type>(std::cout, " "));
+	std::cout << std::endl;
+
+	const auto &testout = net(res.best_weights, testset.inputs());
+	std::cout << "Test error: " << evaluate_loss(loss, testout, testset.targets()) << '\n';
+	std::cout << "Precision/recall:\n" << precision_recall(testout.matrix(), testset.targets().matrix()) << std::endl;
+
+	return 0;
+}
+
+
