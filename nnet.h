@@ -9,22 +9,13 @@
 
 namespace nnet {
 
-// a printable representation of the value
-// (will be specialised for AD types)
-template<class C>
-struct value_functor {
-	typedef const C &result_type;
-	result_type operator()(const C &in) const {
-		return in;
-	}
-};
-
-// we define our own functors for exp and log to make sure the right functions are found
-// both for adept::aReal and for plain floats.
+// we define our own functors for exp and log because they
+// must be specialised for adept::aReal
 template<class F>
 struct exp_functor {
 	typedef F return_type;
 	F operator()(const F &x) const {
+		using std::exp;
 		return exp(x);
 	}
 };
@@ -33,7 +24,18 @@ template<class F>
 struct log_functor {
 	typedef F return_type;
 	F operator()(const F &x) const {
+		using std::log;
 		return log(x);
+	}
+};
+
+// a printable representation of the value
+// (will be specialised for AD types)
+template<class C>
+struct value_functor {
+	typedef const C &result_type;
+	result_type operator()(const C &in) const {
+		return in;
 	}
 };
 

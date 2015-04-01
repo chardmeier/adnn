@@ -23,7 +23,7 @@ auto precision_recall(const Eigen::MatrixBase<Derived1> &pred, const Eigen::Matr
 }
 
 int main() {
-	typedef nnet::mlp<boost::fusion::vector<sigmoid,softmax> > net_type;
+	typedef nnet::mlp<boost::fusion::vector<nnet::sigmoid,nnet::softmax>,double> net_type;
 
 	net_type net(7, 100, 3);
 	nnet::crossentropy_loss loss;

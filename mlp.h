@@ -25,7 +25,7 @@ public:
 	typedef F float_type;
 
 	typedef Eigen::Matrix<float_type,Eigen::Dynamic,Eigen::Dynamic> float_matrix;
-	typedef mlp_dataset<mlp<ActivationVector,A>,float_matrix,float_matrix> dataset;
+	typedef mlp_dataset<mlp<ActivationVector,F>,float_matrix,float_matrix> dataset;
 
 	template<class Matrix>
 	class input_type {
@@ -104,22 +104,24 @@ public:
 		Eigen::Array<FF,Eigen::Dynamic,1> data_;
 		Eigen::Map<Eigen::Matrix<FF,Eigen::Dynamic,Eigen::Dynamic> > w1_, w2_;
 
-		weight_type(std::size_t inp, std::size_t hid, std::size_t out) :
+		template<class Derived>
+		weight_type(std::size_t inp, std::size_t hid, std::size_t out,
+			const Eigen::ArrayBase<Derived> &data) :
 				inp_(inp), hid_(hid), out_(out),
-				data_(inp_ * hid_ + hid_ * out_, 1),
+				data_(data),
 				w1_(data_.data(), inp_, hid_),
 				w2_(data_.data() + w1_.size(), hid_, out_) {}
 
 	public:
 		typedef FF float_type;
 
-		weight_type(const mlp<ActivationVector,A> &net) :
+		weight_type(const mlp<ActivationVector,F> &net) :
 				inp_(net.input_), hid_(net.hidden_), out_(net.output_),
 				data_(inp_ * hid_ + hid_ * out_, 1),
 				w1_(data_.data(), inp_, hid_),
 				w2_(data_.data() + w1_.size(), hid_, out_) {}
 
-		weight_type(const mlp<ActivationVector,A> &net, const FF &value) :
+		weight_type(const mlp<ActivationVector,F> &net, const FF &value) :
 				inp_(net.input_), hid_(net.hidden_), out_(net.output_),
 				data_(inp_ * hid_ + hid_ * out_, 1),
 				w1_(data_.data(), inp_, hid_),
@@ -150,11 +152,11 @@ public:
 			return *this;
 		}
 
-                weight_type<typename ad_types<FF>::float_type> get_gradients() {
-                    weight_type<typename ad_types<FF>::float_type> out(w1_.rows(), w1_.cols(), w2_.cols());
-                    adept::get_gradients(data_.data(), data_.size(), out.data_.data());
-                    return out;
-                }
+		template<class Functor>
+		weight_type<typename Functor::result_type> transform(const Functor &f) const {
+			return weight_type<typename Functor::result_type>(w1_.rows(), w1_.cols(), w2_.cols(),
+				data_.unaryExpr(f));
+		}
 
 		auto &array() {
 			return data_;

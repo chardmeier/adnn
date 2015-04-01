@@ -2,6 +2,7 @@
 #define NNET_NNOPT_H
 
 #include "nnet.h"
+#include "net_wrapper.h"
 
 namespace nnet {
 
