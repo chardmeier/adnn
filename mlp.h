@@ -48,6 +48,14 @@ public:
 			return matrix_;
 		}
 
+		auto array() {
+			return matrix_.array();
+		}
+
+		auto array() const {
+			return matrix_.array();
+		}
+
 		std::size_t nitems() const {
 			return matrix_.rows();
 		}
@@ -78,6 +86,14 @@ public:
 
 		const Matrix &matrix() const {
 			return matrix_;
+		}
+
+		auto array() {
+			return matrix_.array();
+		}
+
+		auto array() const {
+			return matrix_.array();
 		}
 
 		std::size_t nitems() const {
@@ -136,8 +152,8 @@ public:
 	typedef mlp_batch_iterator<Net,InputMatrix,OutputMatrix> batch_iterator;
 
 	struct input_transformation {
-		std_matrix<typename InputMatrix::Scalar> mean;
-		std_matrix<typename InputMatrix::Scalar> std;
+		std_array<typename InputMatrix::Scalar,1,Eigen::Dynamic> mean;
+		std_array<typename InputMatrix::Scalar,1,Eigen::Dynamic> std;
 	};
 
 	mlp_dataset() {}
@@ -169,11 +185,13 @@ public:
 	batch_iterator batch_end() const;
 
 	void shuffle();
+	auto subset(std::size_t from, std::size_t to);
 	auto subset(std::size_t from, std::size_t to) const;
 	input_transformation shift_scale();
 
-	template<class InputMatrix2,class OutputMatrix2>
-	void transform_input(const typename mlp_dataset<Net,InputMatrix2,OutputMatrix2>::input_transformation &s);
+	//template<class InputMatrix2,class OutputMatrix2>
+	//void transform_input(const typename mlp_dataset<Net,InputMatrix2,OutputMatrix2>::input_transformation &s);
+	void transform_input(const input_transformation &s);
 };
 
 template<class Net,class InputMatrix,class OutputMatrix>
@@ -184,7 +202,7 @@ make_mlp_dataset(InputMatrix inputs, OutputMatrix targets) {
 
 template<class Net,class InputMatrix,class OutputMatrix>
 struct facade {
-	typedef decltype(std::declval<mlp_dataset<Net,InputMatrix,OutputMatrix> >().subset(std::size_t(0),std::size_t(0))) value_type;
+	typedef decltype(std::declval<mlp_dataset<Net,const InputMatrix,const OutputMatrix> >().subset(std::size_t(0),std::size_t(0))) value_type;
 	typedef boost::iterator_facade<mlp_batch_iterator<Net,InputMatrix,OutputMatrix>,
 				value_type, boost::forward_traversal_tag, value_type>
 		type;
@@ -258,16 +276,27 @@ template<class Net,class InputMatrix,class OutputMatrix>
 typename mlp_dataset<Net,InputMatrix,OutputMatrix>::input_transformation mlp_dataset<Net,InputMatrix,OutputMatrix>::shift_scale() {
 	input_transformation t;
 	t.mean = inputs_.matrix().colwise().mean();
-	inputs_.matrix() = inputs_.matrix().rowwise() - t.means;
+	inputs_.matrix() = inputs_.array().rowwise() - t.mean;
 	t.std = inputs_.matrix().cwiseProduct(inputs_.matrix()).colwise().mean().cwiseSqrt();
-	inputs_.matrix() = inputs_.matrix().rowwise().cwiseQuotient(t.std);
+	inputs_.matrix() = inputs_.array().rowwise() / t.std;
 	return t;
 }
 
+//template<class Net,class InputMatrix,class OutputMatrix>
+//template<class InputMatrix2,class OutputMatrix2>
+//void mlp_dataset<Net,InputMatrix,OutputMatrix>::transform_input(const typename mlp_dataset<Net,InputMatrix2,OutputMatrix2>::input_transformation &s) {
+	//inputs_.matrix() = (inputs_.matrix().rowwise() - s.mean).cwiseQuotient(s.std);
+//}
+
 template<class Net,class InputMatrix,class OutputMatrix>
-template<class InputMatrix2,class OutputMatrix2>
-void mlp_dataset<Net,InputMatrix,OutputMatrix>::transform_input(const typename mlp_dataset<Net,InputMatrix2,OutputMatrix2>::input_transformation &s) {
-	inputs_.matrix() = (inputs_.matrix().rowwise() - s.mean).cwiseQuotient(s.std);
+void mlp_dataset<Net,InputMatrix,OutputMatrix>::transform_input(const input_transformation &s) {
+	inputs_.matrix() = (inputs_.array().rowwise() - s.mean).rowwise() / s.std;
+}
+
+template<class Net,class InputMatrix,class OutputMatrix>
+auto mlp_dataset<Net,InputMatrix,OutputMatrix>::subset(std::size_t from, std::size_t to) {
+	to = std::min(to, nitems());
+	return make_mlp_dataset<Net>(inputs_.matrix().middleRows(from, to - from), targets_.matrix().middleRows(from, to - from));
 }
 
 template<class Net,class InputMatrix,class OutputMatrix>

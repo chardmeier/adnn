@@ -78,11 +78,11 @@ struct softmax {
 	};
 };
 
-template<class F>
-using std_matrix = Eigen::Matrix<F,Eigen::Dynamic,Eigen::Dynamic>;
+template<class F,int Rows = Eigen::Dynamic,int Cols = Eigen::Dynamic>
+using std_matrix = Eigen::Matrix<F,Rows,Cols>;
 
-template<class F>
-using std_array = Eigen::Array<F,Eigen::Dynamic,Eigen::Dynamic>;
+template<class F,int Rows = Eigen::Dynamic,int Cols = Eigen::Dynamic>
+using std_array = Eigen::Array<F,Rows,Cols>;
 
 struct mat_size {
 	std::size_t rows;
