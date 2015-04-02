@@ -5,7 +5,8 @@
 #include <random>
 #include <type_traits>
 
-#include <boost/fusion/include/intrinsic.hpp>
+#include <boost/fusion/include/at_c.hpp>
+#include <boost/fusion/include/value_at.hpp>
 #include <boost/fusion/include/vector.hpp>
 #include <boost/iterator/iterator_facade.hpp>
 
@@ -19,12 +20,13 @@ class mlp_dataset;
 template<class ActivationVector,class F>
 class mlp {
 private:
-	std::size_t input_, hidden_, output_;
+	typedef boost::fusion::vector<mat_size,mat_size> spec_type;
+	spec_type spec_;
 
 public:
 	typedef F float_type;
 
-	typedef Eigen::Matrix<float_type,Eigen::Dynamic,Eigen::Dynamic> float_matrix;
+	typedef std_matrix<float_type> float_matrix;
 	typedef mlp_dataset<mlp<ActivationVector,F>,float_matrix,float_matrix> dataset;
 
 	template<class Matrix>
@@ -57,9 +59,7 @@ public:
 	};
 
 	template<class FF>
-	struct basic_input_type {
-		typedef input_type<Eigen::Matrix<FF,Eigen::Dynamic,Eigen::Dynamic> > type;
-	};
+	using basic_input_type = input_type<std_matrix<FF> >;
 
 	template<class Matrix>
 	class output_type {
@@ -91,125 +91,38 @@ public:
 	};
 
 	template<class FF>
-	struct basic_output_type {
-		typedef output_type<Eigen::Matrix<FF,Eigen::Dynamic,Eigen::Dynamic> > type;
-	};
+	using basic_output_type = output_type<std_matrix<FF> >;
 
 	template<class FF>
-	class weight_type {
-	private:
-		template<typename> friend class weight_type;
-
-		std::size_t inp_, hid_, out_;
-		Eigen::Array<FF,Eigen::Dynamic,1> data_;
-		Eigen::Map<Eigen::Matrix<FF,Eigen::Dynamic,Eigen::Dynamic> > w1_, w2_;
-
-		template<class Derived>
-		weight_type(std::size_t inp, std::size_t hid, std::size_t out,
-			const Eigen::ArrayBase<Derived> &data) :
-				inp_(inp), hid_(hid), out_(out),
-				data_(data),
-				w1_(data_.data(), inp_, hid_),
-				w2_(data_.data() + w1_.size(), hid_, out_) {}
-
-	public:
-		typedef FF float_type;
-
-		weight_type(const mlp<ActivationVector,F> &net) :
-				inp_(net.input_), hid_(net.hidden_), out_(net.output_),
-				data_(inp_ * hid_ + hid_ * out_, 1),
-				w1_(data_.data(), inp_, hid_),
-				w2_(data_.data() + w1_.size(), hid_, out_) {}
-
-		weight_type(const mlp<ActivationVector,F> &net, const FF &value) :
-				inp_(net.input_), hid_(net.hidden_), out_(net.output_),
-				data_(inp_ * hid_ + hid_ * out_, 1),
-				w1_(data_.data(), inp_, hid_),
-				w2_(data_.data() + w1_.size(), hid_, out_) {
-			data_.setConstant(value);
-		}
-
-		template<class FFF>
-		weight_type(const weight_type<FFF> &o) :
-				inp_(o.inp_), hid_(o.hid_), out_(o.out_),
-				data_(o.data_.template cast<FF>()),
-				w1_(data_.data(), inp_, hid_),
-				w2_(data_.data() + w1_.size(), hid_, out_) {}
-
-		weight_type(const weight_type<FF> &o) :
-				inp_(o.inp_), hid_(o.hid_), out_(o.out_),
-				data_(o.data_),
-				w1_(data_.data(), inp_, hid_),
-				w2_(data_.data() + w1_.size(), hid_, out_) {}
-
-		weight_type<FF> &operator=(const weight_type<FF> &o) {
-			inp_ = o.inp_;
-			hid_ = o.hid_;
-			out_ = o.out_;
-			data_ = o.data_;
-			new(&w1_) Eigen::Map<Eigen::Matrix<FF,Eigen::Dynamic,Eigen::Dynamic> >(data_.data(), inp_, hid_);
-			new(&w2_) Eigen::Map<Eigen::Matrix<FF,Eigen::Dynamic,Eigen::Dynamic> >(data_.data() + w1_.size(), hid_, out_);
-			return *this;
-		}
-
-		template<class Functor>
-		weight_type<typename Functor::result_type> transform(const Functor &f) const {
-			return weight_type<typename Functor::result_type>(w1_.rows(), w1_.cols(), w2_.cols(),
-				data_.unaryExpr(f));
-		}
-
-		auto &array() {
-			return data_;
-		}
-
-		const auto &array() const {
-			return data_;
-		}
-
-		auto &w1() {
-			return w1_;
-		}
-
-		const auto &w1() const {
-			return w1_;
-		}
-
-		auto &w2() {
-			return w2_;
-		}
-
-		const auto &w2() const {
-			return w2_;
-		}
-
-		void init_normal(float_type stddev) {
-			std::random_device rd;
-			std::mt19937 rgen(rd());
-			std::normal_distribution<float_type> dist(0, stddev);
-			std::generate_n(data_.data(), data_.size(), std::bind(dist, rgen));
-		}
-	};
-
+	using weight_type = weights<FF,spec_type,std_array<FF> >;
+	
 	mlp(size_t input, size_t hidden, size_t output) :
-		input_(input), hidden_(hidden), output_(output) {}
+		spec_(mat_size(input, hidden), mat_size(hidden, output)) {}
 
 	template<class FF,class InputMatrix>
 	auto operator()(const weight_type<FF> &W, const input_type<InputMatrix> &inp) const;
+
+	const spec_type &spec() const {
+		return spec_;
+	}
 };
 
+#include <iostream>
 template<class ActivationVector,class A>
 template<class FF,class InputMatrix>
 auto mlp<ActivationVector,A>::operator()(const weight_type<FF> &w, const input_type<InputMatrix> &inp) const {
-	const auto &p1 = (inp.matrix() * w.w1()).eval();
-	typedef typename boost::fusion::result_of::value_at_c<ActivationVector,0>::type::
-		template functor<typename std::remove_const<typename std::remove_reference<decltype(p1)>::type>::type> Activation1;
+	const auto &i = inp.matrix();
+	const auto &w0 = w.template at<0>();
+	std::cerr << "i: " << i.rows() << 'x' << i.cols() << '\n';
+	std::cerr << "w0: " << w0.rows() << 'x' << w0.cols() << '\n';
+	const auto &p1 = (i * w0).eval();
+	//const auto &p1 = (inp.matrix() * w.template at<0>()).eval();
+	typedef typename boost::fusion::result_of::value_at_c<ActivationVector,0>::type::template functor<decltype(p1)> Activation1;
 	const auto &a1 = Activation1()(p1).eval();
-	const auto &p2 = (a1 * w.w2()).eval();
-	typedef Eigen::Matrix<FF,Eigen::Dynamic,Eigen::Dynamic> outmatrix;
-	typedef typename boost::fusion::result_of::value_at_c<ActivationVector,1>::type::
-		template functor<typename std::remove_const<typename std::remove_reference<decltype(p2)>::type>::type> Activation2;
-	outmatrix out = Activation2()(p2).eval();
-	return output_type<outmatrix>(out);
+	const auto &p2 = (a1 * w.template at<1>()).eval();
+	typedef typename boost::fusion::result_of::value_at_c<ActivationVector,1>::type::template functor<decltype(p2)> Activation2;
+	std_matrix<FF> out = Activation2()(p2).eval();
+	return output_type<std_matrix<FF> >(out);
 }
 
 template<class Net,class InputMatrix,class OutputMatrix>

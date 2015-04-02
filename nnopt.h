@@ -12,7 +12,7 @@ struct nnopt_results {
 	typedef typename Net::template weight_type<float_type> weight_type;
 
 	nnopt_results(const Net &net) :
-		best_weights(net) {}
+		best_weights(net.spec()) {}
 
 	std::vector<float_type> trainerr;
 	std::vector<float_type> valerr;
@@ -43,7 +43,7 @@ public:
 
 template<class Net>
 nnopt<Net>::nnopt(const Net &net) :
-		nsteps_(300), batchsize_(50), init_weights_(net), initial_learning_rate_(.001), momentum_(.9), l2reg_(.001) {
+		nsteps_(10), batchsize_(50), init_weights_(net.spec()), initial_learning_rate_(.001), momentum_(.9), l2reg_(.001) {
 	init_weights_.init_normal(.01);
 }
 
@@ -60,10 +60,10 @@ nnopt_results<Net> nnopt<Net>::train(const Net &net, const Loss &loss, const Tra
 
 	weight_type ww(init_weights_);
 
-	weight_type gain(net, ONE);
-	weight_type weight_change(net, ZERO);
-	weight_type rms(net, ONE);
-	weight_type prev_grad(net, ZERO);
+	weight_type gain(net.spec(), ONE);
+	weight_type weight_change(net.spec(), ZERO);
+	weight_type rms(net.spec(), ONE);
+	weight_type prev_grad(net.spec(), ZERO);
 
 	float_type alpha = initial_learning_rate_;
 
@@ -73,13 +73,13 @@ nnopt_results<Net> nnopt<Net>::train(const Net &net, const Loss &loss, const Tra
 	for(int i = 0; i < nsteps_; i++) {
 		float_type err = 0;
 		for(auto batchit = trainset.batch_begin(batchsize_); batchit != trainset.batch_end(); ++batchit) {
-			weight_type grad(net, ZERO);
+			weight_type grad(net.spec(), ZERO);
 			err += wrapped_net(ww, batchit->inputs(), batchit->targets(), grad);
 			grad.array() += l2reg_ * ww.array();
 			//std::cerr << "grad.w1:\n" << grad.w1() << std::endl;
 			rms.array() = float_type(.9) * rms.array() + float_type(.1) * grad.array() * grad.array();
 			//std::cerr << "rms.w1:\n" << rms.w1() << std::endl;
-			weight_type normgrad(net);
+			weight_type normgrad(net.spec());
 			normgrad.array() = grad.array() / (rms.array().sqrt() + TINY);
 			//std::cerr << "normgrad.w1:\n" << normgrad.w1() << std::endl;
 			weight_change.array() = momentum_ * weight_change.array() - alpha * gain.array() * normgrad.array();

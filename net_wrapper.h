@@ -85,14 +85,14 @@ template<class N,class Loss,class FloatType = adept::Real,class AFloatType = ade
 class net_wrapper {
 public:
 	typedef FloatType float_type;
-	typedef typename N::template basic_input_type<float_type>::type input_type;
-	typedef typename N::template basic_output_type<float_type>::type output_type;
+	typedef typename N::template basic_input_type<float_type> input_type;
+	typedef typename N::template basic_output_type<float_type> output_type;
 	typedef typename N::template weight_type<float_type> weight_type;
 
 private:
 	typedef AFloatType afloat_type;
-	typedef typename N::template basic_input_type<afloat_type>::type ainput_type;
-	typedef typename N::template basic_output_type<afloat_type>::type aoutput_type;
+	typedef typename N::template basic_input_type<afloat_type> ainput_type;
+	typedef typename N::template basic_output_type<afloat_type> aoutput_type;
 	typedef typename N::template weight_type<afloat_type> aweight_type;
 
 	typedef N net_type;
