@@ -4,7 +4,7 @@ CXX = g++
 #HOME = /cluster/home/chm
 HOME = /tmp/chm2
 
-BOOST = $(HOME)/boost_1_54_0
+BOOST = $(HOME)/boost_1_57_0
 ADEPT = $(HOME)/adept-1.0
 EIGEN = $(HOME)/eigen-3.2.4 
 
