@@ -38,7 +38,7 @@ int main() {
 	data.shuffle();
 	const auto &trainset = data.subset(0, split1);
 	const auto &valset = data.subset(split1, split2);
-	const auto &testset = data.subset(split1, data.nitems());
+	const auto &testset = data.subset(split2, data.nitems());
 	
 	nnet::nnopt<net_type> opt(net);
 	nnet::nnopt_results<net_type> res = opt.train(net, loss, trainset, valset);
