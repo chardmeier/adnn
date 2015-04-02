@@ -135,6 +135,11 @@ private:
 public:
 	typedef mlp_batch_iterator<Net,InputMatrix,OutputMatrix> batch_iterator;
 
+	struct input_transformation {
+		std_matrix<typename InputMatrix::Scalar> mean;
+		std_matrix<typename InputMatrix::Scalar> std;
+	};
+
 	mlp_dataset() {}
 
 	mlp_dataset(const InputMatrix &inputs, const OutputMatrix &targets) :
@@ -165,6 +170,10 @@ public:
 
 	void shuffle();
 	auto subset(std::size_t from, std::size_t to) const;
+	input_transformation shift_scale();
+
+	template<class InputMatrix2,class OutputMatrix2>
+	void transform_input(const typename mlp_dataset<Net,InputMatrix2,OutputMatrix2>::input_transformation &s);
 };
 
 template<class Net,class InputMatrix,class OutputMatrix>
@@ -243,6 +252,22 @@ void mlp_dataset<Net,InputMatrix,OutputMatrix>::shuffle() {
 	std::shuffle(perm.indices().data(), perm.indices().data() + perm.indices().size(), rgen);
 	inputs_.matrix() = perm * inputs_.matrix();
 	targets_.matrix() = perm * targets_.matrix();
+}
+
+template<class Net,class InputMatrix,class OutputMatrix>
+typename mlp_dataset<Net,InputMatrix,OutputMatrix>::input_transformation mlp_dataset<Net,InputMatrix,OutputMatrix>::shift_scale() {
+	input_transformation t;
+	t.mean = inputs_.matrix().colwise().mean();
+	inputs_.matrix() = inputs_.matrix().rowwise() - t.means;
+	t.std = inputs_.matrix().cwiseProduct(inputs_.matrix()).colwise().mean().cwiseSqrt();
+	inputs_.matrix() = inputs_.matrix().rowwise().cwiseQuotient(t.std);
+	return t;
+}
+
+template<class Net,class InputMatrix,class OutputMatrix>
+template<class InputMatrix2,class OutputMatrix2>
+void mlp_dataset<Net,InputMatrix,OutputMatrix>::transform_input(const typename mlp_dataset<Net,InputMatrix2,OutputMatrix2>::input_transformation &s) {
+	inputs_.matrix() = (inputs_.matrix().rowwise() - s.mean).cwiseQuotient(s.std);
 }
 
 template<class Net,class InputMatrix,class OutputMatrix>
