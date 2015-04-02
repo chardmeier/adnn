@@ -107,7 +107,6 @@ public:
 	}
 };
 
-#include <iostream>
 template<class ActivationVector,class A>
 template<class FF,class InputMatrix>
 auto mlp<ActivationVector,A>::operator()(const weight_type<FF> &w, const input_type<InputMatrix> &inp) const {
