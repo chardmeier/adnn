@@ -111,12 +111,7 @@ public:
 template<class ActivationVector,class A>
 template<class FF,class InputMatrix>
 auto mlp<ActivationVector,A>::operator()(const weight_type<FF> &w, const input_type<InputMatrix> &inp) const {
-	const auto &i = inp.matrix();
-	const auto &w0 = w.template at<0>();
-	std::cerr << "i: " << i.rows() << 'x' << i.cols() << '\n';
-	std::cerr << "w0: " << w0.rows() << 'x' << w0.cols() << '\n';
-	const auto &p1 = (i * w0).eval();
-	//const auto &p1 = (inp.matrix() * w.template at<0>()).eval();
+	const auto &p1 = (inp.matrix() * w.template at<0>()).eval();
 	typedef typename boost::fusion::result_of::value_at_c<ActivationVector,0>::type::template functor<decltype(p1)> Activation1;
 	const auto &a1 = Activation1()(p1).eval();
 	const auto &p2 = (a1 * w.template at<1>()).eval();
