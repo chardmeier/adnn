@@ -7,10 +7,14 @@
 
 #include <boost/fusion/include/accumulate.hpp>
 #include <boost/fusion/include/advance.hpp>
+#include <boost/fusion/include/as_vector.hpp>
 #include <boost/fusion/include/begin.hpp>
+#include <boost/fusion/include/cons.hpp>
 #include <boost/fusion/include/deref.hpp>
+#include <boost/fusion/include/end.hpp>
 #include <boost/fusion/include/flatten.hpp>
-#include <boost/fusion/include/list.hpp>
+#include <boost/fusion/include/make_cons.hpp>
+#include <boost/fusion/include/make_vector.hpp>
 #include <boost/fusion/include/push_back.hpp>
 
 #include <Eigen/Core>
@@ -88,6 +92,8 @@ struct mat_size {
 	std::size_t rows;
 	std::size_t cols;
 
+	mat_size() {}
+
 	mat_size(std::size_t r, std::size_t c) :
 		rows(r), cols(c) {}
 
@@ -95,6 +101,9 @@ struct mat_size {
 		return rows == o.rows && cols == o.cols;
 	}
 };
+
+template<class FF,class Spec,class Array = std_array<FF> >
+class weights;
 
 namespace detail {
 
@@ -105,26 +114,35 @@ struct compute_weight_size {
 	}
 };
 
-template<class FF,class Spec,class Array = std_array<FF> >
-class weights;
-
-template<class FF,class Spec>
+template<class FF>
 struct create_weight_maps {
+/*
 	template<class List>
-	auto operator()(const std::pair<FF*,List> &s, const mat_size &e) const {
-		typedef Eigen::Map<Eigen::Matrix<FF,Eigen::Dynamic,Eigen::Dynamic> > map_type;
-		FF *newpos = s.first + e.rows * e.cols;
-		return std::make_pair(newpos, push_back(s.second, map_type(s.first, e.rows, e.cols)));
-	}
+	auto operator()(const std::pair<FF*,List> &s, const mat_size &e) const;
 
 	template<class List,class List2>
-	auto operator()(const std::pair<FF*,List> &s, const List2 &e) const {
-		typedef Eigen::Map<std_array<FF> > array_map_type;
-		const auto &sublist = accumulate(e, std::make_pair(s.first, boost::fusion::list<>()), create_weight_maps<FF,Spec>());
-		return std::make_pair(sublist.first, weights<FF,Spec,array_map_type>(
-			array_map_type(s.first, sublist.first - s.first, 1), push_back(s.second, sublist.second)));
-	}
+	auto operator()(const std::pair<FF*,List> &s, const List2 &e) const;
+*/
+	template<class Sequence>
+	auto process_sequence(const Sequence &seq, FF *data) const;
+
+	template<class It>
+	auto process_sequence(const It &it1, const It &it2, FF *data) const;
+
+	template<class It1,class It2>
+	auto process_sequence(const It1 &it1, const It2 &it2, FF *data) const;
+
+	auto process_element(const mat_size &e, FF *data) const;
+
+	template<class Sequence>
+	auto process_element(const Sequence &s, FF *data) const;
 };
+
+template<typename>
+struct is_eigen_map : std::false_type {};
+
+template<class P,int O,class S>
+struct is_eigen_map<Eigen::Map<P,O,S> > : std::true_type {};
 
 } // namespace detail
 
@@ -133,14 +151,18 @@ class weights {
 private:
 	template<typename,typename,typename> friend class weights;
 
+/*
 	typedef typename boost::fusion::result_of::accumulate<
 			Spec,
 			std::pair<FF*,boost::fusion::list<> >,
 			detail::create_weight_maps<FF,Spec> >::type::second_type
 		map_type;
+*/
 
 	Spec spec_;
 	Array data_;
+
+	typedef decltype(detail::create_weight_maps<FF>().process_sequence(spec_, data_.data())) map_type;
 	map_type mat_;
 
 public:
@@ -150,18 +172,31 @@ public:
 	weights(const spec_type &spec) :
 			spec_(spec),
 			data_(boost::fusion::accumulate(boost::fusion::flatten(spec_), std::size_t(0), detail::compute_weight_size()), 1),
-			mat_(boost::fusion::accumulate(spec_, std::make_pair(data_.data(), boost::fusion::list<>()), detail::create_weight_maps<FF,Spec>()).second) {}
+			mat_(detail::create_weight_maps<FF>().process_sequence(spec_, data_.data())) {}
+			//mat_(boost::fusion::accumulate(spec_, std::make_pair(data_.data(), boost::fusion::list<>()), detail::create_weight_maps<FF,Spec>()).second) {}
 
-	template<class Derived>
-	weights(const spec_type &spec, const Eigen::ArrayBase<Derived> &data) :
+	// Eigen::Map has no copy constructor
+	template<class P,int O,class S,class A1 = Array>
+	weights(const spec_type &spec, Eigen::Map<P,O,S> &data,
+		typename std::enable_if<detail::is_eigen_map<A1>::value>::type* = nullptr) :
+			spec_(spec),
+			data_(data.data(), data.rows(), data.cols()),
+			mat_(detail::create_weight_maps<FF>().process_sequence(spec_, data_.data())) {}
+			//mat_(boost::fusion::accumulate(spec_, std::make_pair(data_.data(), boost::fusion::list<>()), detail::create_weight_maps<FF,Spec>()).second) {}
+
+	template<class Derived,class A1 = Array>
+	weights(const spec_type &spec, const Eigen::ArrayBase<Derived> &data,
+		typename std::enable_if<!detail::is_eigen_map<A1>::value>::type* = nullptr) :
 			spec_(spec),
 			data_(data),
-			mat_(boost::fusion::accumulate(spec_, std::make_pair(data_.data(), boost::fusion::list<>()), detail::create_weight_maps<FF,Spec>()).second) {}
+			mat_(detail::create_weight_maps<FF>().process_sequence(spec_, data_.data())) {}
+			//mat_(boost::fusion::accumulate(spec_, std::make_pair(data_.data(), boost::fusion::list<>()), detail::create_weight_maps<FF,Spec>()).second) {}
 
 	weights(const spec_type &spec, const FF &value) :
 			spec_(spec),
 			data_(boost::fusion::accumulate(boost::fusion::flatten(spec_), std::size_t(0), detail::compute_weight_size()), 1),
-			mat_(boost::fusion::accumulate(spec_, std::make_pair(data_.data(), boost::fusion::list<>()), detail::create_weight_maps<FF,Spec>()).second) {
+			mat_(detail::create_weight_maps<FF>().process_sequence(spec_, data_.data())) {
+			//mat_(boost::fusion::accumulate(spec_, std::make_pair(data_.data(), boost::fusion::list<>()), detail::create_weight_maps<FF,Spec>()).second) {
 		data_.setConstant(value);
 	}
 
@@ -169,12 +204,14 @@ public:
 	weights(const weights<FFF,OSpec,OArray> &o) :
 			spec_(o.spec_),
 			data_(o.data_.template cast<FF>()),
-			mat_(boost::fusion::accumulate(spec_, std::make_pair(data_.data(), boost::fusion::list<>()), detail::create_weight_maps<FF,Spec>()).second) {}
+			mat_(detail::create_weight_maps<FF>().process_sequence(spec_, data_.data())) {}
+			//mat_(boost::fusion::accumulate(spec_, std::make_pair(data_.data(), boost::fusion::list<>()), detail::create_weight_maps<FF,Spec>()).second) {}
 
 	weights(const weights<FF,Spec,Array> &o) :
 			spec_(o.spec_),
 			data_(o.data_),
-			mat_(boost::fusion::accumulate(spec_, std::make_pair(data_.data(), boost::fusion::list<>()), detail::create_weight_maps<FF,Spec>()).second) {}
+			mat_(detail::create_weight_maps<FF>().process_sequence(spec_, data_.data())) {}
+			//mat_(boost::fusion::accumulate(spec_, std::make_pair(data_.data(), boost::fusion::list<>()), detail::create_weight_maps<FF,Spec>()).second) {}
 
 	template<class OtherArray>
 	weights<FF,Spec,Array> &operator=(const weights<FF,Spec,OtherArray> &o) {
@@ -203,6 +240,14 @@ public:
 		return data_;
 	}
 
+	auto &sequence() {
+		return mat_;
+	}
+
+	const auto &sequence() const {
+		return mat_;
+	}
+
 	template<int N>
 	auto at() {
 		using namespace boost::fusion;
@@ -222,6 +267,67 @@ public:
 		std::generate_n(data_.data(), data_.size(), std::bind(dist, rgen));
 	}
 };
+
+namespace detail {
+
+template<class FF>
+template<class Sequence>
+auto create_weight_maps<FF>::process_sequence(const Sequence &seq, FF *data) const {
+	using namespace boost::fusion;
+	return as_vector(process_sequence(begin(seq), end(seq), data).first);
+}
+
+template<class FF>
+template<class It>
+auto create_weight_maps<FF>::process_sequence(const It &it1, const It &it2, FF *data) const {
+	return std::make_pair(boost::fusion::nil_(), data);
+}
+
+template<class FF>
+template<class It1,class It2>
+auto create_weight_maps<FF>::process_sequence(const It1 &it1, const It2 &it2, FF *data) const {
+	using namespace boost::fusion;
+	auto head = process_element(deref(it1), data);
+	auto tail = process_sequence(next(it1), it2, head.second);
+	return std::make_pair(make_cons(head.first, tail.first), tail.second);
+}
+
+template<class FF>
+auto create_weight_maps<FF>::process_element(const mat_size &e, FF *data) const {
+	typedef Eigen::Map<Eigen::Matrix<FF,Eigen::Dynamic,Eigen::Dynamic> > map_type;
+	FF *newpos = data + e.rows * e.cols;
+	return std::make_pair(map_type(data, e.rows, e.cols), newpos);
+}
+
+template<class FF>
+template<class Sequence>
+auto create_weight_maps<FF>::process_element(const Sequence &s, FF *data) const {
+	using namespace boost::fusion;
+	auto l = process_sequence(begin(s), end(s), data);
+	return std::make_pair(as_vector(l.first), l.second);
+}
+
+/*
+template<class FF,class Spec>
+template<class List>
+auto create_weight_maps<FF,Spec>::operator()(const std::pair<FF*,List> &s, const mat_size &e) const {
+	typedef Eigen::Map<Eigen::Matrix<FF,Eigen::Dynamic,Eigen::Dynamic> > map_type;
+	FF *newpos = s.first + e.rows * e.cols;
+	return std::make_pair(newpos, push_back(s.second, map_type(s.first, e.rows, e.cols)));
+}
+
+template<class FF,class Spec>
+template<class List,class List2>
+auto create_weight_maps<FF,Spec>::operator()(const std::pair<FF*,List> &s, const List2 &e) const {
+	typedef Eigen::Map<std_array<FF> > array_map_type;
+	const auto &sublist = accumulate(e, std::make_pair(s.first, boost::fusion::list<>()), create_weight_maps<FF,Spec>());
+	array_map_type submap(s.first, sublist.first - s.first, 1);
+	return std::make_pair(sublist.first, boost::fusion::make_vector(weights<FF,List2,array_map_type>(
+		push_back(s.second, sublist.second), submap)));
+}
+*/
+
+} // namespace detail
 
 } // namespace nnet
 
