@@ -18,7 +18,7 @@ typename nnet::lblm<Order,FF>::dataset lblm_load_data(const char *file, const ty
 
 template<int Order,class FF>
 typename nnet::lblm<Order,FF>::dataset lblm_load_data(const char *file, const typename nnet::lblm<Order,FF>::dataset::vocmap_type &vocmap) {
-	return lblm_load_data(file, &vocmap);
+	return lblm_load_data<Order,FF>(file, &vocmap);
 }
 
 namespace {
