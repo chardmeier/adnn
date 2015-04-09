@@ -110,13 +110,13 @@ int main() {
 	const int ngram_order = 3;
 	typedef nnet::lblm<ngram_order,adept::Real> net_type;
 
+	net_type::dataset trainset = lblm_load_data<ngram_order,adept::Real>("train.txt");
+	net_type::dataset valset = lblm_load_data<ngram_order,adept::Real>("val.txt", trainset.vocmap());
+	net_type::dataset testset = lblm_load_data<ngram_order,adept::Real>("test.txt", trainset.vocmap());
+	
 	net_type net(1000, 150);
 	nnet::lblm_energy loss;
 
-	net_type::dataset trainset = lblm_load_data<ngram_order,adept::Real>("train.txt");
-	net_type::dataset valset = lblm_load_data<ngram_order,adept::Real>("val.txt");
-	net_type::dataset testset = lblm_load_data<ngram_order,adept::Real>("test.txt");
-	
 	nnet::nnopt<net_type> opt(net);
 	nnet::nnopt_results<net_type> res = opt.train(net, loss, trainset, valset);
 
