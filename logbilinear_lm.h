@@ -35,7 +35,7 @@ using sparse_matrix = Eigen::SparseMatrix<FF>;
 
 namespace detail_lblm {
 
-typedef boost::fusion::vector2<mat_size,mat_size> mat_with_bias;
+typedef boost::fusion::vector2<mat_size,vec_size> mat_with_bias;
 
 /*
 template<int N> struct C_specs;
@@ -134,10 +134,10 @@ public:
 			voc_size_(vocsize), embed_size_(embedsize) {
 		using boost::fusion::at_c;
 		at_c<0>(spec_[0]) = mat_size(vocsize, embedsize);
-		at_c<1>(spec_[0]) = mat_size(1, vocsize);
+		at_c<1>(spec_[0]) = vec_size(vocsize);
 		for(int i = 1; i < Order; i++) {
 			at_c<0>(spec_[i]) = mat_size(embedsize, embedsize);
-			at_c<1>(spec_[i]) = mat_size(1, embedsize);
+			at_c<1>(spec_[i]) = vec_size(embedsize);
 		}
 	}
 
@@ -170,7 +170,7 @@ public:
 		const InpMat &inp = at_c<0>(mm);
 		const WMat &w = at_c<0>(at_c<1>(mm));
 		const BiasMat &b = at_c<1>(at_c<1>(mm));
-		out_.noalias() += inp * embed_ * w + b;
+		out_.noalias() += (inp * embed_ * w).rowwise() + b;
 	}
 };
 

@@ -102,6 +102,19 @@ struct mat_size {
 	}
 };
 
+struct vec_size {
+	std::size_t cols;
+
+	vec_size() {}
+
+	vec_size(std::size_t c) :
+		cols(c) {}
+
+	bool operator==(const vec_size &o) const {
+		return cols == o.cols;
+	}
+};
+
 template<class FF,class Spec,class Array = std_array<FF> >
 class weights;
 
@@ -109,8 +122,13 @@ namespace detail {
 
 struct compute_weight_size {
 	typedef std::size_t result_type;
+
 	std::size_t operator()(const std::size_t &s, const mat_size &e) const {
 		return s + e.rows * e.cols;
+	}
+
+	std::size_t operator()(const std::size_t &s, const vec_size &e) const {
+		return s + e.cols;
 	}
 };
 
@@ -133,6 +151,7 @@ struct create_weight_maps {
 	auto process_sequence(const It1 &it1, const It2 &it2, FF *data) const;
 
 	auto process_element(const mat_size &e, FF *data) const;
+	auto process_element(const vec_size &e, FF *data) const;
 
 	template<class Sequence>
 	auto process_element(const Sequence &s, FF *data) const;
@@ -297,6 +316,13 @@ auto create_weight_maps<FF>::process_element(const mat_size &e, FF *data) const 
 	typedef Eigen::Map<Eigen::Matrix<FF,Eigen::Dynamic,Eigen::Dynamic> > map_type;
 	FF *newpos = data + e.rows * e.cols;
 	return std::make_pair(map_type(data, e.rows, e.cols), newpos);
+}
+
+template<class FF>
+auto create_weight_maps<FF>::process_element(const vec_size &e, FF *data) const {
+	typedef Eigen::Map<Eigen::Matrix<FF,1,Eigen::Dynamic> > map_type;
+	FF *newpos = data + e.cols;
+	return std::make_pair(map_type(data, e.cols), newpos);
 }
 
 template<class FF>
