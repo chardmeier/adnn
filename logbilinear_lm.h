@@ -31,7 +31,7 @@ template<class Net,class VocMatrix>
 class lblm_dataset;
 
 template<class FF>
-using sparse_matrix = Eigen::SparseMatrix<FF>;
+using sparse_matrix = Eigen::SparseMatrix<FF,Eigen::RowMajor>; // row-major is essential because of the way the matrix is filled.
 
 namespace detail_lblm {
 
@@ -187,7 +187,7 @@ auto lblm<Order,A>::operator()(const weight_type<FF> &w, const input_type<InputM
 	out.setZero();
 	fusion::for_each(fusion::zip(inp.sequence(), fusion::pop_front(wseq)),
 		detail_lblm::process_lblm<decltype(embed),decltype(out)>(embed, out));
-	return output_type<std_matrix<FF> >(fusion::make_vector(out * embed.transpose() + embed_bias));
+	return output_type<std_matrix<FF> >(fusion::make_vector((out * embed.transpose()).rowwise() + embed_bias));
 }
 
 struct lblm_energy {
@@ -195,7 +195,7 @@ struct lblm_energy {
 	struct functor {
 		typedef typename T1::float_type result_type;
 		result_type operator()(const T1 &output, const T2 &targets) const {
-			return -(output.template at<0>() * targets.template at<0>()).value();
+			return -(output.template at<0>() * targets.template at<0>().transpose()).sum();
 		}
 	};
 };
