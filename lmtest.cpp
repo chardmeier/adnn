@@ -91,9 +91,9 @@ typename nnet::lblm<Order,FF>::dataset lblm_load_data(const char *file, const ty
 	boost::fusion::for_each(out.targets().sequence(), setup_matrix);
 
 	for(std::size_t i = 1; i < corpus.size(); i++) { // the first element is just a boundary
-		out.targets().template at<0>().insert(i, corpus[i]) = 1;
+		out.targets().template at<0>().insert(i - 1, corpus[i]) = 1;
 		boost::mpl::for_each<boost::mpl::range_c<int,0,Order> >
-			(process_ngram<Order,decltype(out.inputs()),idx>(out.inputs(), i, &corpus[i-1]));
+			(process_ngram<Order,decltype(out.inputs()),idx>(out.inputs(), i - 1, &corpus[i-1]));
 /*
 		for(std::size_t p = i - 1, n = 0; n < Order; n++) {
 			out.inputs().template at<Order-n-1>().insert(i, corpus[p], ONE);
