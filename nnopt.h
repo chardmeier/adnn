@@ -31,6 +31,7 @@ private:
 	std::size_t batchsize_;
 	weight_type init_weights_;
 	float_type initial_learning_rate_;
+	float_type learning_schedule_;
 	float_type momentum_;
 	float_type l2reg_;
 
@@ -43,7 +44,9 @@ public:
 
 template<class Net>
 nnopt<Net>::nnopt(const Net &net) :
-		nsteps_(10), batchsize_(50), init_weights_(net.spec()), initial_learning_rate_(.001), momentum_(.9), l2reg_(.001) {
+		nsteps_(2000), batchsize_(10), init_weights_(net.spec()),
+		initial_learning_rate_(.001), learning_schedule_(200),
+		momentum_(.9), l2reg_(.001) {
 	init_weights_.init_normal(.01);
 }
 
@@ -65,13 +68,12 @@ nnopt_results<Net> nnopt<Net>::train(const Net &net, const Loss &loss, const Tra
 	weight_type rms(net.spec(), ONE);
 	weight_type prev_grad(net.spec(), ZERO);
 
-	float_type alpha = initial_learning_rate_;
-
 	results.best_valerr = std::numeric_limits<float_type>::infinity();
 	
 	bool first_iteration = true;
 	for(int i = 0; i < nsteps_; i++) {
 		float_type err = 0;
+		float_type alpha = initial_learning_rate_ / (ONE + float_type(i) / learning_schedule_);
 		for(auto batchit = trainset.batch_begin(batchsize_); batchit != trainset.batch_end(); ++batchit) {
 			weight_type grad(net.spec(), ZERO);
 			err += wrapped_net(ww, batchit->inputs(), batchit->targets(), grad);
