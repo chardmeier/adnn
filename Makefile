@@ -14,7 +14,7 @@ EIGEN = $(HOME)/eigen-3.2.4
 NNET_HEADERS = nnet.h net_wrapper.h nnopt.h mlp.h logbilinear_lm.h
 
 lmtest:	lmtest.cpp $(NNET_HEADERS)
-	$(CXX) -std=c++14 -ftemplate-backtrace-limit=0 -o 3layer -g $(OPT) -Wall -Wno-unused-local-typedefs -I$(BOOST) -I$(EIGEN) -I$(ADEPT)/include -L$(ADEPT)/lib lmtest.cpp -ladept -lm
+	$(CXX) -std=c++14 -ftemplate-backtrace-limit=0 -o lmtest -g $(OPT) -Wall -Wno-unused-local-typedefs -I$(BOOST) -I$(EIGEN) -I$(ADEPT)/include -L$(ADEPT)/lib lmtest.cpp -ladept -lm
 
 nnopt:	3layer.cpp $(NNET_HEADERS)
 	$(CXX) -std=c++14 -o 3layer -g $(OPT) -Wall -Wno-unused-local-typedefs -I$(BOOST) -I$(EIGEN) -I$(ADEPT)/include -L$(ADEPT)/lib 3layer.cpp -ladept -lm
