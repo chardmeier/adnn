@@ -85,7 +85,8 @@ typename nnet::lblm<Order,FF>::dataset lblm_load_data(const char *file, const ty
 					tokidx = vocsize++;
 					out.vocmap().insert(std::make_pair(token, tokidx));
 				}
-			}
+			} else
+				tokidx = it->second;
 			corpus.push_back(tokidx);
 			nwords++;
 		}
@@ -101,7 +102,7 @@ typename nnet::lblm<Order,FF>::dataset lblm_load_data(const char *file, const ty
 	out.targets().matrix().reserve(Eigen::VectorXi::Constant(corpus.size() - 1, 1));
 
 	for(std::size_t i = 1; i < corpus.size(); i++) { // the first element is just a boundary
-		out.targets().template at<0>().insert(i - 1, corpus[i]) = 1;
+		out.targets().matrix().insert(i - 1, corpus[i]) = 1;
 		boost::mpl::for_each<boost::mpl::range_c<int,0,Order> >
 			(process_ngram<Order,decltype(out.inputs()),idx>(out.inputs(), i - 1, &corpus[i-1]));
 	}
