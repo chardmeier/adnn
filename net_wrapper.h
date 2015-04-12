@@ -134,7 +134,7 @@ template<class N,class Loss,class F,class A>
 template<class InputType,class OutputType>
 typename net_wrapper<N,Loss,F,A>::float_type net_wrapper<N,Loss,F,A>::operator()(const weight_type &W, const InputType &inp,
 		const OutputType &targets, weight_type &grad) const {
-	adept::Stack stack;
+	static adept::Stack stack;
 	aweight_type aW(W);
 	ainput_type ainp(inp.template cast<afloat_type>());
 	aoutput_type atargets(targets.template cast<afloat_type>());
