@@ -32,10 +32,19 @@ namespace {
 
 		process_ngram(output_type &out, std::size_t row, Idx *p) : out_(out), row_(row), p_(p) {}
 
+		template<class Derived>
+		void set_row(Eigen::SparseMatrixBase<Derived> &sparse, std::size_t row, Idx p) const {
+			sparse.insert(row, p) = 1;
+		}
+
+		void set_row(nnet::vocidx_vector &idxmat, std::size_t row, Idx p) const {
+			idxmat(row) = p;
+		}
+
 		template<class T>
 		void operator()(T i) {
 			typedef typename output_type::float_type FF;
-			out_.template at<Order - T::value - 1>().insert(row_, *p_) = 1;
+			set_row(out_.template at<Order - T::value - 1>(), row_, *p_);
 			if(*p_ != 0)
 				p_--;
 		}
@@ -44,7 +53,7 @@ namespace {
 
 template<int Order,class FF>
 typename nnet::lblm<Order,FF>::dataset lblm_load_data(const char *file, const typename nnet::lblm<Order,FF>::dataset::vocmap_type *vocmap) {
-	typedef typename nnet::lblm<Order,FF>::dataset::vocidx_type idx;
+	typedef typename nnet::vocidx_type idx;
 	std::vector<idx> corpus;
 	const idx SENTENCE_BOUNDARY = 0;
 	const idx UNKNOWN_WORD = 1;
@@ -83,24 +92,18 @@ typename nnet::lblm<Order,FF>::dataset lblm_load_data(const char *file, const ty
 		corpus.push_back(SENTENCE_BOUNDARY);
 	}
 
-	auto setup_matrix = [&] (nnet::sparse_matrix<FF> &mat) {
-			mat.resize(corpus.size() - 1, vocsize);
-			mat.reserve(Eigen::VectorXi::Constant(corpus.size() - 1, 1));
+	auto setup_matrix = [&] (nnet::vocidx_vector &mat) {
+			mat.resize(corpus.size() - 1);
 		};
 	boost::fusion::for_each(out.inputs().sequence(), setup_matrix);
-	boost::fusion::for_each(out.targets().sequence(), setup_matrix);
+
+	out.targets().matrix().resize(corpus.size() - 1, vocsize);
+	out.targets().matrix().reserve(Eigen::VectorXi::Constant(corpus.size() - 1, 1));
 
 	for(std::size_t i = 1; i < corpus.size(); i++) { // the first element is just a boundary
 		out.targets().template at<0>().insert(i - 1, corpus[i]) = 1;
 		boost::mpl::for_each<boost::mpl::range_c<int,0,Order> >
 			(process_ngram<Order,decltype(out.inputs()),idx>(out.inputs(), i - 1, &corpus[i-1]));
-/*
-		for(std::size_t p = i - 1, n = 0; n < Order; n++) {
-			out.inputs().template at<Order-n-1>().insert(i, corpus[p], ONE);
-			if(corpus[p] != SENTENCE_BOUNDARY)
-				p--;
-		}
-*/
 	}
 
 	return out;

@@ -136,10 +136,10 @@ typename net_wrapper<N,Loss,F,A>::float_type net_wrapper<N,Loss,F,A>::operator()
 		const OutputType &targets, weight_type &grad) const {
 	static adept::Stack stack;
 	aweight_type aW(W);
-	ainput_type ainp(inp.template cast<afloat_type>());
+	//ainput_type ainp(inp.template cast<afloat_type>());
 	aoutput_type atargets(targets.template cast<afloat_type>());
 	stack.new_recording();
-	aoutput_type aout = net_(aW, ainp);
+	aoutput_type aout = net_(aW, inp);
 	afloat_type err = evaluate_loss(loss_, aout, atargets);
 	err.set_gradient(float_type(1));
 	stack.compute_adjoint();

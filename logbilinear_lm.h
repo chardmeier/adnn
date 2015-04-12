@@ -27,30 +27,18 @@
 
 namespace nnet {
 
-template<class Net,class VocMatrix>
+template<class Net,class InputMatrix,class TargetMatrix>
 class lblm_dataset;
 
 template<class FF>
 using sparse_matrix = Eigen::SparseMatrix<FF,Eigen::RowMajor>; // row-major is essential because of the way the matrix is filled.
 
+typedef unsigned long vocidx_type;
+typedef Eigen::Matrix<vocidx_type,Eigen::Dynamic,1> vocidx_vector;
+
 namespace detail_lblm {
 
 typedef boost::fusion::vector2<mat_size,vec_size> mat_with_bias;
-
-/*
-template<int N> struct C_specs;
-
-template<>
-struct C_specs<0> {
-	typedef boost::fusion::list<> type;
-};
-
-template<int N>
-struct C_specs {
-	using namespace boost::fusion;
-	typedef result_of::push_front<C_specs<N-1>::type,mat_with_bias>::type type;
-};
-*/
 
 template<int Order,class Matrix>
 class ngram_data_type {
@@ -113,8 +101,6 @@ public:
 template<int Order,class F>
 class lblm {
 private:
-	//typedef detail_lblm::C_specs<Order>::type C_specs;
-	//typedef boost::fusion::result_of::push_front<C_specs,detail_lblm::mat_with_bias>::type spec_type;
 	typedef boost::array<detail_lblm::mat_with_bias,Order> spec_type;
 	spec_type spec_;
 
@@ -123,13 +109,13 @@ private:
 public:
 	typedef F float_type;
 
-	typedef lblm_dataset<lblm<Order,F>,sparse_matrix<F> > dataset;
+	typedef lblm_dataset<lblm<Order,F>,vocidx_vector,sparse_matrix<F> > dataset;
 
 	template<class Matrix>
 	using input_type = detail_lblm::ngram_data_type<Order,Matrix>;
 
 	template<class FF>
-	using basic_input_type = input_type<sparse_matrix<FF> >;
+	using basic_input_type = input_type<vocidx_vector>;
 
 	template<class Matrix>
 	using output_type = detail_lblm::ngram_data_type<1,Matrix>;
@@ -164,23 +150,28 @@ namespace detail_lblm {
 template<class Embed,class OutMatrix>
 class process_lblm {
 private:
-	const Embed &embed_;
+	typedef typename std::remove_reference<Embed>::type embed_type;
+
+	const embed_type &embed_;
 	OutMatrix &out_;
 
 	template<class T,class U>
 	using pair = boost::fusion::vector2<T,U>;
 
 public:
-	process_lblm(const Embed &embed, OutMatrix &out) :
+	process_lblm(const embed_type &embed, OutMatrix &out) :
 		embed_(embed), out_(out) {}
 
 	template<class InpMat,class WMat,class BiasMat>
 	void operator()(const pair<InpMat,const pair<WMat,BiasMat>& > &mm) const {
 		using boost::fusion::at_c;
 		const InpMat &inp = at_c<0>(mm);
+		std_matrix<typename embed_type::Scalar> embedded_inp(inp.rows(), embed_.cols());
+		for(int i = 0; i < inp.rows(); i++)
+			embedded_inp.row(i) = embed_.row(inp(i, 0));
 		const WMat &w = at_c<0>(at_c<1>(mm));
 		const BiasMat &b = at_c<1>(at_c<1>(mm));
-		out_.noalias() += (inp * embed_ * w).rowwise() + b;
+		out_.noalias() += (embedded_inp * w).rowwise() + b;
 	}
 };
 
@@ -210,20 +201,19 @@ struct lblm_energy {
 	};
 };
 
-template<class Net,class VocMatrix>
+template<class Net,class InputMatrix,class TargetMatrix>
 class lblm_batch_iterator;
 
-template<class Net,class VocMatrix>
+template<class Net,class InputMatrix,class TargetMatrix>
 class lblm_dataset {
 public:
-	typedef unsigned long vocidx_type;
 	typedef std::unordered_map<std::string,vocidx_type> vocmap_type;
 
 private:
 	typedef Net net_type;
 
-	typedef typename net_type::template input_type<VocMatrix> input_type;
-	typedef typename net_type::template output_type<VocMatrix> output_type;
+	typedef typename net_type::template input_type<InputMatrix> input_type;
+	typedef typename net_type::template output_type<TargetMatrix> output_type;
 
 	input_type inputs_;
 	output_type targets_;
@@ -231,7 +221,7 @@ private:
 	vocmap_type vocmap_;
 
 public:
-	typedef lblm_batch_iterator<Net,VocMatrix> batch_iterator;
+	typedef lblm_batch_iterator<Net,InputMatrix,TargetMatrix> batch_iterator;
 
 	lblm_dataset() {}
 
@@ -275,29 +265,29 @@ public:
 	auto subset(std::size_t from, std::size_t to) const;
 };
 
-template<class Net,class VocMatrix,class InputSequence,class TargetSequence>
-lblm_dataset<Net,VocMatrix>
+template<class Net,class InputMatrix,class TargetMatrix,class InputSequence,class TargetSequence>
+lblm_dataset<Net,InputMatrix,TargetMatrix>
 make_lblm_dataset(InputSequence inputs, TargetSequence targets) {
-	return lblm_dataset<Net,VocMatrix>(inputs, targets);
+	return lblm_dataset<Net,InputMatrix,TargetMatrix>(inputs, targets);
 }
 
 namespace detail_lblm {
 
-template<class Net,class VocMatrix>
+template<class Net,class InputMatrix,class TargetMatrix>
 struct facade {
-	typedef decltype(lblm_dataset<Net,VocMatrix>().subset(std::size_t(0),std::size_t(0))) value_type;
-	typedef boost::iterator_facade<lblm_batch_iterator<Net,VocMatrix>,
+	typedef decltype(lblm_dataset<Net,InputMatrix,TargetMatrix>().subset(std::size_t(0),std::size_t(0))) value_type;
+	typedef boost::iterator_facade<lblm_batch_iterator<Net,InputMatrix,TargetMatrix>,
 				value_type, boost::forward_traversal_tag, value_type>
 		type;
 };
 
 } // namespace detail_lblm
 
-template<class Net,class VocMatrix>
+template<class Net,class InputMatrix,class TargetMatrix>
 class lblm_batch_iterator
-	: public detail_lblm::facade<Net,VocMatrix>::type {
+	: public detail_lblm::facade<Net,InputMatrix,TargetMatrix>::type {
 public:
-	typedef lblm_dataset<Net,VocMatrix> dataset;
+	typedef lblm_dataset<Net,InputMatrix,TargetMatrix> dataset;
 
 	lblm_batch_iterator(const dataset &data, std::size_t batchsize) :
 		data_(data), batchsize_(batchsize), pos_(0) {}
@@ -309,9 +299,9 @@ public:
 private:
 	friend class boost::iterator_core_access;
 
-	using typename detail_lblm::facade<Net,VocMatrix>::type::value_type;
+	using typename detail_lblm::facade<Net,InputMatrix,TargetMatrix>::type::value_type;
 
-	const lblm_dataset<Net,VocMatrix> &data_;
+	const lblm_dataset<Net,InputMatrix,TargetMatrix> &data_;
 	std::size_t batchsize_;
 	std::size_t pos_;
 
@@ -334,43 +324,63 @@ private:
 	}
 };
 
-template<class Net,class VocMatrix>
-typename lblm_dataset<Net,VocMatrix>::batch_iterator
-lblm_dataset<Net,VocMatrix>::batch_begin(std::size_t batchsize) const {
+template<class Net,class InputMatrix,class TargetMatrix>
+typename lblm_dataset<Net,InputMatrix,TargetMatrix>::batch_iterator
+lblm_dataset<Net,InputMatrix,TargetMatrix>::batch_begin(std::size_t batchsize) const {
 	return batch_iterator(*this, batchsize);
 }
 
-template<class Net,class VocMatrix>
-typename lblm_dataset<Net,VocMatrix>::batch_iterator
-lblm_dataset<Net,VocMatrix>::batch_end() const {
+template<class Net,class InputMatrix,class TargetMatrix>
+typename lblm_dataset<Net,InputMatrix,TargetMatrix>::batch_iterator
+lblm_dataset<Net,InputMatrix,TargetMatrix>::batch_end() const {
 	return batch_iterator(*this);
 }
 
-template<class Net,class VocMatrix>
-void lblm_dataset<Net,VocMatrix>::shuffle() {
+template<class Net,class InputMatrix,class TargetMatrix>
+void lblm_dataset<Net,InputMatrix,TargetMatrix>::shuffle() {
 	Eigen::PermutationMatrix<Eigen::Dynamic,Eigen::Dynamic> perm(nitems());
 	perm.setIdentity();
 	std::random_device rd;
 	std::mt19937 rgen(rd());
 	std::shuffle(perm.indices().data(), perm.indices().data() + perm.indices().size(), rgen);
-	boost::fusion::for_each(inputs_.sequence(), [&perm] (VocMatrix &mat) { mat = perm * mat; });
-	boost::fusion::for_each(targets_.sequence(), [&perm] (VocMatrix &mat) { mat = perm * mat; });
+	boost::fusion::for_each(inputs_.sequence(), [&perm] (InputMatrix &mat) { mat = perm * mat; });
+	boost::fusion::for_each(targets_.sequence(), [&perm] (TargetMatrix &mat) { mat = perm * mat; });
 }
 
-template<class Net,class VocMatrix>
-auto lblm_dataset<Net,VocMatrix>::subset(std::size_t from, std::size_t to) {
+namespace detail_lblm {
+
+struct submatrix_functor {
+	std::size_t from_, N_;
+
+	submatrix_functor(std::size_t f, std::size_t t) : from_(f), N_(t - f) {}
+
+	template<class Derived>
+	auto operator()(const Eigen::MatrixBase<Derived> &inpmat) const {
+		return inpmat.middleRows(from_, N_);
+	}
+
+	template<class Derived>
+	auto operator()(const Eigen::SparseMatrixBase<Derived> &inpmat) const {
+		return inpmat.middleRows(from_, N_);
+	}
+};
+
+} // namespace detail_lblm
+
+template<class Net,class InputMatrix,class TargetMatrix>
+auto lblm_dataset<Net,InputMatrix,TargetMatrix>::subset(std::size_t from, std::size_t to) {
 	to = std::min(to, nitems());
-	auto submat = [from,to] (const VocMatrix &mat) { return mat.middleRows(from, to - from); };
+	detail_lblm::submatrix_functor submat(from, to);
 	using boost::fusion::transform;
-	return make_lblm_dataset<Net,VocMatrix>(transform(inputs_.sequence(), submat), transform(targets_.sequence(), submat));
+	return make_lblm_dataset<Net,InputMatrix,TargetMatrix>(transform(inputs_.sequence(), submat), transform(targets_.sequence(), submat));
 }
 
-template<class Net,class VocMatrix>
-auto lblm_dataset<Net,VocMatrix>::subset(std::size_t from, std::size_t to) const {
+template<class Net,class InputMatrix,class TargetMatrix>
+auto lblm_dataset<Net,InputMatrix,TargetMatrix>::subset(std::size_t from, std::size_t to) const {
 	to = std::min(to, nitems());
-	auto submat = [from,to] (const VocMatrix &mat) { return mat.middleRows(from, to - from); };
+	detail_lblm::submatrix_functor submat(from, to);
 	using boost::fusion::transform;
-	return make_lblm_dataset<Net,VocMatrix>(transform(inputs_.sequence(), submat), transform(targets_.sequence(), submat));
+	return make_lblm_dataset<Net,InputMatrix,TargetMatrix>(transform(inputs_.sequence(), submat), transform(targets_.sequence(), submat));
 }
 
 } // namespace nnet
