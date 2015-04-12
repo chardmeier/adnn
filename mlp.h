@@ -202,7 +202,7 @@ make_mlp_dataset(InputMatrix inputs, OutputMatrix targets) {
 
 template<class Net,class InputMatrix,class OutputMatrix>
 struct facade {
-	typedef decltype(std::declval<mlp_dataset<Net,const InputMatrix,const OutputMatrix> >().subset(std::size_t(0),std::size_t(0))) value_type;
+	typedef decltype(DECLVAL(mlp_dataset<Net,const InputMatrix,const OutputMatrix> )().subset(std::size_t(0),std::size_t(0))) value_type;
 	typedef boost::iterator_facade<mlp_batch_iterator<Net,InputMatrix,OutputMatrix>,
 				value_type, boost::forward_traversal_tag, value_type>
 		type;
