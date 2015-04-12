@@ -3,6 +3,8 @@
 
 #include <adept.h>
 
+#include <Eigen/SparseCore>
+
 #include "nnet.h"
 
 namespace nnet {
@@ -54,6 +56,20 @@ struct log_functor<adept::aReal> {
 	}
 };
 
+namespace detail {
+
+template<class Derived>
+const Eigen::MatrixBase<Derived> &as_dense(const Eigen::MatrixBase<Derived> &mat) {
+	return mat;
+}
+
+template<class Derived>
+std_matrix<typename Derived::Scalar> as_dense(const Eigen::SparseMatrixBase<Derived> &mat) {
+	return std_matrix<typename Derived::Scalar>(mat);
+}
+
+} // namespace detail
+
 struct quadratic_loss {
 	template<class T1,class T2>
 	struct functor {
@@ -70,7 +86,7 @@ struct crossentropy_loss {
 	struct functor {
 		typedef typename T1::float_type result_type;
 		result_type operator()(const T1 &output, const T2 &targets) const {
-			return -output.matrix().unaryExpr(log_functor<result_type>()).cwiseProduct(targets.matrix()).sum() / targets.nitems();
+			return -output.matrix().unaryExpr(log_functor<result_type>()).cwiseProduct(detail::as_dense(targets.matrix())).sum() / targets.nitems();
 		}
 	};
 };
