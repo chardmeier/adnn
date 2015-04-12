@@ -115,7 +115,7 @@ int main() {
 	net_type::dataset testset = lblm_load_data<ngram_order,adept::Real>("test.txt", trainset.vocmap());
 	
 	net_type net(trainset.vocmap().size(), 150);
-	nnet::lblm_energy loss;
+	nnet::crossentropy_loss loss;
 
 	nnet::nnopt<net_type> opt(net);
 	nnet::nnopt_results<net_type> res = opt.train(net, loss, trainset, valset);
