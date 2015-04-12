@@ -2,6 +2,7 @@
 #define NNET_NNET_H
 
 #include <cmath>
+#include <iostream>
 #include <type_traits>
 #include <utility>
 
@@ -15,9 +16,15 @@
 #include <boost/fusion/include/flatten.hpp>
 #include <boost/fusion/include/make_cons.hpp>
 #include <boost/fusion/include/make_vector.hpp>
-#include <boost/fusion/include/push_back.hpp>
+#include <boost/fusion/include/size.hpp>
 
 #include <Eigen/Core>
+
+#ifdef __ICC
+#define DECLVAL(C) (*static_cast<C>(nullptr))
+#else
+#define DECLVAL(C) std::declval<C>
+#endif
 
 namespace nnet {
 
@@ -65,7 +72,7 @@ struct sigmoid {
 			typedef typename matrix_base::Scalar F;
 			return (F(1) / (F(1) + (-x).array().unaryExpr(exp_functor<F>()))).matrix();
 		}
-		typedef decltype(std::declval<functor<Derived> >()(std::declval<matrix_base>())) result_type;
+		//typedef decltype(DECLVAL(functor<Derived> )()(DECLVAL(matrix_base)())) result_type;
 	};
 };
 
@@ -75,12 +82,18 @@ struct softmax {
 		typedef Eigen::MatrixBase<typename std::remove_const<typename std::remove_reference<Derived>::type>::type> matrix_base;
 		auto operator()(const matrix_base &x) const {
 			typedef typename matrix_base::Scalar F;
-			auto a = (x.array() - x.array().rowwise().maxCoeff().replicate(1, x.cols())).unaryExpr(exp_functor<F>());
-			return (a / a.rowwise().sum().replicate(1, x.cols())).matrix();
+			auto a = (x.array().colwise() - x.array().rowwise().maxCoeff()).unaryExpr(exp_functor<F>());
+			return (a.colwise() / a.rowwise().sum()).matrix();
 		}
-		typedef decltype(std::declval<functor<Derived> >()(std::declval<matrix_base>())) result_type;
+		//typedef decltype(DECLVAL(functor<Derived> )()(DECLVAL(matrix_base)())) result_type;
 	};
 };
+
+template<class Activation,class Matrix>
+auto invoke_activation(const Matrix &mat) {
+	typename Activation::template functor<Matrix> fn;
+	return fn(mat);
+}
 
 template<class F,int Rows = Eigen::Dynamic,int Cols = Eigen::Dynamic>
 using std_matrix = Eigen::Matrix<F,Rows,Cols>;
@@ -251,11 +264,11 @@ public:
 		return weights<FFF,Spec,std_array<FFF> >(spec_, data_.unaryExpr(f));
 	}
 
-	auto &array() {
+	Array &array() {
 		return data_;
 	}
 
-	const auto &array() const {
+	const Array &array() const {
 		return data_;
 	}
 
@@ -353,7 +366,27 @@ auto create_weight_maps<FF,Spec>::operator()(const std::pair<FF*,List> &s, const
 }
 */
 
+struct dump_matrix {
+	std::ostream &os_;
+
+	dump_matrix(std::ostream &os) : os_(os) {}
+
+	template<class Matrix>
+	void operator()(const Matrix &mat) const {
+		os_ << "MATRIX " << mat.rows() << ' ' << mat.cols() << '\n' << mat;
+	}
+};
+
 } // namespace detail
+
+template<class FF,class Spec,class Array>
+std::ostream &operator<<(std::ostream &os, const weights<FF,Spec,Array> &ww) {
+	using namespace boost::fusion;
+	const auto &flatseq = flatten(ww.sequence());
+	os << "WEIGHTS " << size(flatseq) << '\n';
+	for_each(flatseq, detail::dump_matrix(os));
+	return os;
+}
 
 } // namespace nnet
 
