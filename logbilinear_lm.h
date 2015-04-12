@@ -88,6 +88,16 @@ public:
 		return sequence_[N];
 	}
 
+	template<int N = Order>
+	Matrix &matrix(typename std::enable_if<N==1>::type* = nullptr) {
+		return sequence_[0];
+	}
+
+	template<int N = Order>
+	const Matrix &matrix(typename std::enable_if<N==1>::type* = nullptr) const {
+		return sequence_[0];
+	}
+
 	std::size_t nitems() const {
 		return sequence_[0].rows();
 	}
@@ -187,7 +197,7 @@ auto lblm<Order,A>::operator()(const weight_type<FF> &w, const input_type<InputM
 	out.setZero();
 	fusion::for_each(fusion::zip(inp.sequence(), fusion::pop_front(wseq)),
 		detail_lblm::process_lblm<decltype(embed),decltype(out)>(embed, out));
-	return output_type<std_matrix<FF> >(fusion::make_vector((out * embed.transpose()).rowwise() + embed_bias));
+	return output_type<std_matrix<FF> >(fusion::make_vector((invoke_activation<softmax>(out * embed.transpose()).rowwise() + embed_bias).eval()));
 }
 
 struct lblm_energy {
@@ -275,7 +285,7 @@ namespace detail_lblm {
 
 template<class Net,class VocMatrix>
 struct facade {
-	typedef decltype(std::declval<lblm_dataset<Net,VocMatrix> >().subset(std::size_t(0),std::size_t(0))) value_type;
+	typedef decltype(lblm_dataset<Net,VocMatrix>().subset(std::size_t(0),std::size_t(0))) value_type;
 	typedef boost::iterator_facade<lblm_batch_iterator<Net,VocMatrix>,
 				value_type, boost::forward_traversal_tag, value_type>
 		type;
