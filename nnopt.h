@@ -44,8 +44,8 @@ public:
 
 template<class Net>
 nnopt<Net>::nnopt(const Net &net) :
-		nsteps_(2000), batchsize_(10), init_weights_(net.spec()),
-		initial_learning_rate_(.001), learning_schedule_(200),
+		nsteps_(50), batchsize_(100), init_weights_(net.spec()),
+		initial_learning_rate_(.001), learning_schedule_(20),
 		momentum_(.9), l2reg_(.001) {
 	init_weights_.init_normal(.01);
 }
@@ -90,7 +90,12 @@ nnopt_results<Net> nnopt<Net>::train(const Net &net, const Loss &loss, const Tra
 			//std::cerr << "- ww.w1:\n" << ww.w1() << std::endl;
 
 			if(!first_iteration) {
-				std::reference_wrapper<bool(float_type)> sign(std::signbit);
+				struct {
+					bool operator()(const float_type &x) const {
+						return std::signbit(x);
+					}
+				} sign;
+				//auto sign = [] (const float_type &x) { return std::signbit(x); };
 				gain.array() = 
 					(grad.array().unaryExpr(sign) == prev_grad.array().unaryExpr(sign)).
 					select(gain.array() + float_type(.05), float_type(.95) * gain.array());
