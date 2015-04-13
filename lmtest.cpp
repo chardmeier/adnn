@@ -11,6 +11,10 @@
 #include "logbilinear_lm.h"
 #include "nnopt.h"
 
+#undef _GNU_SOURCE
+#define _GNU_SOURCE
+#include <fenv.h>
+
 template<int Order,class FF>
 typename nnet::lblm<Order,FF>::dataset lblm_load_data(const char *file, const typename nnet::lblm<Order,FF>::dataset::vocmap_type &vocmap);
 template<int Order,class FF>
@@ -53,6 +57,8 @@ namespace {
 
 template<int Order,class FF>
 typename nnet::lblm<Order,FF>::dataset lblm_load_data(const char *file, const typename nnet::lblm<Order,FF>::dataset::vocmap_type *vocmap) {
+	feenableexcept(FE_INVALID | FE_DIVBYZERO);
+
 	typedef typename nnet::vocidx_type idx;
 	std::vector<idx> corpus;
 	const idx SENTENCE_BOUNDARY = 0;
@@ -72,6 +78,11 @@ typename nnet::lblm<Order,FF>::dataset lblm_load_data(const char *file, const ty
 	
 	std::size_t nwords = 0;
 	std::ifstream is(file);
+	if(!is) {
+		std::cerr << "Problem reading file: " << file << std::endl;
+		std::exit(1);
+	}
+
 	corpus.push_back(SENTENCE_BOUNDARY);
 	for(std::string line; getline(is, line);) {
 		std::istringstream ts(line);
