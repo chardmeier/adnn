@@ -133,7 +133,7 @@ int main(int argc, char **argv) {
 	net_type::dataset valset = lblm_load_data<ngram_order,adept::Real>((std::string("val.") + suffix).c_str(), trainset.vocmap());
 	net_type::dataset testset = lblm_load_data<ngram_order,adept::Real>((std::string("test.") + suffix).c_str(), trainset.vocmap());
 	
-	net_type net(trainset.vocmap().size(), 5);
+	net_type net(trainset.vocmap().size(), 80);
 	nnet::crossentropy_loss loss;
 
 	nnet::nnopt<net_type> opt(net);
@@ -148,6 +148,7 @@ int main(int argc, char **argv) {
 	const auto &testout = net(res.best_weights, testset.inputs());
 	std::cout << "Test energy: " << evaluate_loss(loss, testout, testset.targets()) << '\n';
 
+	std::cout << "BEST WEIGHTS:\n" << res.best_weights << '\n';
 	return 0;
 }
 
