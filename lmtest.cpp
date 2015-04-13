@@ -57,8 +57,6 @@ namespace {
 
 template<int Order,class FF>
 typename nnet::lblm<Order,FF>::dataset lblm_load_data(const char *file, const typename nnet::lblm<Order,FF>::dataset::vocmap_type *vocmap) {
-	feenableexcept(FE_INVALID | FE_DIVBYZERO);
-
 	typedef typename nnet::vocidx_type idx;
 	std::vector<idx> corpus;
 	const idx SENTENCE_BOUNDARY = 0;
@@ -122,6 +120,8 @@ typename nnet::lblm<Order,FF>::dataset lblm_load_data(const char *file, const ty
 }
 
 int main(int argc, char **argv) {
+	feenableexcept(FE_INVALID | FE_DIVBYZERO);
+
 	std::string suffix = "cl";
 	if(argc == 2) 
 		suffix = argv[1];
