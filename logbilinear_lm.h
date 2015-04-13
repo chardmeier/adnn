@@ -188,7 +188,7 @@ auto lblm<Order,A>::operator()(const weight_type<FF> &w, const input_type<InputM
 	out.setZero();
 	fusion::for_each(fusion::zip(inp.sequence(), fusion::pop_front(wseq)),
 		detail_lblm::process_lblm<decltype(embed),decltype(out)>(embed, out));
-	return output_type<std_matrix<FF> >(fusion::make_vector((invoke_activation<softmax>(out * embed.transpose()).rowwise() + embed_bias).eval()));
+	return output_type<std_matrix<FF> >(fusion::make_vector(invoke_activation<softmax>((out * embed.transpose()).rowwise() + embed_bias).eval()));
 }
 
 struct lblm_energy {
