@@ -4,6 +4,8 @@
 #include "nnet.h"
 #include "net_wrapper.h"
 
+#include <ctime>
+
 namespace nnet {
 
 template<class Net>
@@ -70,11 +72,14 @@ nnopt_results<Net> nnopt<Net>::train(const Net &net, const Loss &loss, const Tra
 
 	results.best_valerr = std::numeric_limits<float_type>::infinity();
 	
+	std::size_t progress = trainset.nitems() / batchsize_ / 80;
+
 	bool first_iteration = true;
 	for(int i = 0; i < nsteps_; i++) {
 		float_type err = 0;
 		float_type alpha = initial_learning_rate_ / (ONE + float_type(i) / learning_schedule_);
-		for(auto batchit = trainset.batch_begin(batchsize_); batchit != trainset.batch_end(); ++batchit) {
+		std::size_t excnt = 0;
+		for(auto batchit = trainset.batch_begin(batchsize_); batchit != trainset.batch_end(); ++batchit, excnt += batchsize_) {
 			weight_type grad(net.spec(), ZERO);
 			err += wrapped_net(ww, batchit->inputs(), batchit->targets(), grad);
 			grad.array() += l2reg_ * ww.array();
@@ -103,6 +108,9 @@ nnopt_results<Net> nnopt<Net>::train(const Net &net, const Loss &loss, const Tra
 				first_iteration = false;
 
 			prev_grad = grad;
+
+			if(excnt % progress < batchsize_ && excnt > 0)
+				std::cerr << '.';
 		}
 		results.trainerr.push_back(err);
 
@@ -114,8 +122,11 @@ nnopt_results<Net> nnopt<Net>::train(const Net &net, const Loss &loss, const Tra
 			results.best_weights = ww;
 		}
 
-		std::cout << i << " (" << alpha << "): Training error: " << results.trainerr.back() <<
-			", validation error: " << results.valerr.back() << std::endl;
+		std::time_t t = std::time(nullptr);
+		char time[80];
+		std::strftime(time, sizeof(time), "%c", std::localtime(&t));
+		std::cerr << '\n' << time << ": " << i << " (" << alpha << "): Training error: " <<
+			results.trainerr.back() << ", validation error: " << results.valerr.back() << std::endl;
 	}
 
 	return results;
