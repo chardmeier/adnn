@@ -110,15 +110,19 @@ typename nnet::lblm<Order,FF>::dataset lblm_load_data(const char *file, const ty
 	return out;
 }
 
-int main() {
+int main(int argc, char **argv) {
+	std::string suffix = "cl";
+	if(argc == 2) 
+		suffix = argv[1];
+
 	const int ngram_order = 3;
 	typedef nnet::lblm<ngram_order,adept::Real> net_type;
 
-	net_type::dataset trainset = lblm_load_data<ngram_order,adept::Real>("train.txt");
-	net_type::dataset valset = lblm_load_data<ngram_order,adept::Real>("val.txt", trainset.vocmap());
-	net_type::dataset testset = lblm_load_data<ngram_order,adept::Real>("test.txt", trainset.vocmap());
+	net_type::dataset trainset = lblm_load_data<ngram_order,adept::Real>((std::string("train.") + suffix).c_str());
+	net_type::dataset valset = lblm_load_data<ngram_order,adept::Real>((std::string("val.") + suffix).c_str(), trainset.vocmap());
+	net_type::dataset testset = lblm_load_data<ngram_order,adept::Real>((std::string("test.") + suffix).c_str(), trainset.vocmap());
 	
-	net_type net(trainset.vocmap().size(), 150);
+	net_type net(trainset.vocmap().size(), 5);
 	nnet::crossentropy_loss loss;
 
 	nnet::nnopt<net_type> opt(net);
