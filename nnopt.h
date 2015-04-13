@@ -72,14 +72,14 @@ nnopt_results<Net> nnopt<Net>::train(const Net &net, const Loss &loss, const Tra
 
 	results.best_valerr = std::numeric_limits<float_type>::infinity();
 	
-	std::size_t progress = trainset.nitems() / batchsize_ / 80;
+	std::size_t progress = (trainset.nitems() / batchsize_) / 80;
 
 	bool first_iteration = true;
 	for(int i = 0; i < nsteps_; i++) {
 		float_type err = 0;
 		float_type alpha = initial_learning_rate_ / (ONE + float_type(i) / learning_schedule_);
-		std::size_t excnt = 0;
-		for(auto batchit = trainset.batch_begin(batchsize_); batchit != trainset.batch_end(); ++batchit, excnt += batchsize_) {
+		std::size_t batchcnt = 0;
+		for(auto batchit = trainset.batch_begin(batchsize_); batchit != trainset.batch_end(); ++batchit, ++batchcnt) {
 			weight_type grad(net.spec(), ZERO);
 			err += wrapped_net(ww, batchit->inputs(), batchit->targets(), grad);
 			grad.array() += l2reg_ * ww.array();
@@ -109,7 +109,7 @@ nnopt_results<Net> nnopt<Net>::train(const Net &net, const Loss &loss, const Tra
 
 			prev_grad = grad;
 
-			if(excnt % progress < batchsize_ && excnt > 0)
+			if(batchcnt % progress == 0 && batchcnt > 0)
 				std::cerr << '.';
 		}
 		results.trainerr.push_back(err);
