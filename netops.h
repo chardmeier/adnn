@@ -29,6 +29,10 @@ public:
 		a_.bprop(eval_in);
 		b_.bprop(eval_in.colwise().sum());
 	}
+
+private:
+	const A &a_;
+	const B &b_;
 };
 
 template<class A,class B,class Scalar>
