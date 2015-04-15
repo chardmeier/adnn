@@ -11,6 +11,48 @@ struct expression {
 	}
 };
 
+template<class A>
+class input_matrix : public expression<input_matrix> {
+public:
+	typedef typename A::Scalar F;
+
+	input_matrix(const A &mat) : mat_(mat) {}
+
+	const A &operator()() const {
+		return mat_;
+	}
+
+	template<class Derived>
+	void bprop(const Eigen::MatrixBase<Derived> &in) const {}
+
+private:
+	const A &mat_;
+};
+
+template<class A>
+class weight_matrix : public expression<weight_matrix> {
+public:
+	typedef typename A::Scalar F;
+
+	weight_matrix(const A &weights, A &gradients) :
+			weights_(weights), gradients_(gradients) {
+		gradients_.setZero();
+	}
+
+	const A &operator()() const {
+		return weights_;
+	}
+
+	template<class Derived>
+	void bprop(const Eigen::MatrixBase<Derived> &in) const {
+		gradients_ += in;
+	}
+
+private:
+	const A &weights_;
+	A &gradients_;
+};
+
 template<class A,class B,class Scalar>
 class rowwise_add : public expression<rowwise_add> {
 public:
