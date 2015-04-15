@@ -1,3 +1,6 @@
+#ifndef NNET_NETOPS_H
+#define NNET_NETOPS_H
+
 #include <type_traits>
 #include <Eigen/Core>
 
@@ -204,3 +207,5 @@ softmax(const expression<A> &a) {
 }
 
 } // namespace netops
+
+#endif
