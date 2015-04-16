@@ -18,7 +18,7 @@ struct expression_ptr {
 template<class A>
 struct derived_ptr : public expression_ptr<derived_ptr<A>> {
 	derived_ptr(std::unique_ptr<A> &&p) : ptr_(std::move(p)) {}
-	derived_ptr(derived_ptr<A> &&o) : ptr_(std::move(o.ptr_)) {}
+	derived_ptr(derived_ptr<A> &&o) = default;
 
 	auto operator()() const {
 		return (*ptr_)();
