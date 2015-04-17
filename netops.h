@@ -78,30 +78,10 @@ auto binary_cont(const derived_ptr<A> &a_, const derived_ptr<B> &b_, const F &&f
 	});
 }
 
-template<class A>
-auto cast_if_necessary(A &&a) {
-	return std::forward<A>(a);
-}
-
-template<class D>
-D &&cast_if_necessary(expression_ptr<D> &&p) {
-	return std::move(p).transfer_cast();
-}
-
-template<class A,class... Args>
-derived_ptr<A> make_derived(Args&&... args) {
-	return derived_ptr<A>(std::make_unique<A>(cast_if_necessary(std::forward<Args>(args)) ...));
-}
-
 } // namespace detail
 
-template<class A> class output_matrix;
-
-template<class Derived>
-struct expression {};
-
 template<class A>
-class output_matrix : public expression<output_matrix<A>> {
+class output_matrix {
 public:
 	typedef typename A::F F;
 	enum {
@@ -144,7 +124,7 @@ inline output_matrix<Derived> expression<Derived>::eval() const {
 */
 
 template<class A>
-class input_matrix : public expression<input_matrix<A>> {
+class input_matrix {
 public:
 	typedef typename A::Scalar F;
 	enum {
@@ -174,7 +154,7 @@ private:
 };
 
 template<class A,class B>
-class weight_matrix : public expression<weight_matrix<A,B>> {
+class weight_matrix {
 public:
 	typedef typename A::Scalar F;
 	enum {
@@ -209,7 +189,7 @@ private:
 };
 
 template<class A,class B>
-class rowwise_add : public expression<rowwise_add<A,B>> {
+class rowwise_add {
 public:
 	typedef typename A::F F;
 	enum {
@@ -249,7 +229,7 @@ private:
 };
 
 template<class A,class B>
-class matmul : public expression<matmul<A,B>> {
+class matmul {
 public:
 	typedef typename A::F F;
 	enum {
@@ -290,7 +270,7 @@ private:
 
 /*
 template<class A>
-class logistic_sigmoid : public expression<logistic_sigmoid<A>> {
+class logistic_sigmoid {
 public:
 	typedef typename A::F F;
 	enum {
@@ -319,7 +299,7 @@ private:
 };
 
 template<class A>
-class softmax : public expression<softmax<A>> {
+class softmax {
 public:
 	typedef typename A::F F;
 	enum {
