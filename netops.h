@@ -272,8 +272,8 @@ public:
 	template<class Derived>
 	void bprop(const Eigen::MatrixBase<Derived> &in) const {
 		const auto &eval_in = in.eval();
-		a_.bprop(eval_in * b_().transpose());
-		b_.bprop(a_().transpose() * eval_in);
+		b_([this, &eval_in] (auto &&b) { this->a_.bprop(eval_in * b.transpose()); });
+		a_([this, &eval_in] (auto &&a) { this->b_.bprop(a.transpose() * eval_in); });
 	}
 
 	~matmul() {
