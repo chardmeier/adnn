@@ -404,13 +404,13 @@ operator*(expression_ptr<derived_ptr<A>> &&a, expression_ptr<derived_ptr<B>> &&b
 
 template<class A>
 derived_ptr<expr::logistic_sigmoid<A>>
-logistic_sigmoid(expression_ptr<A> &&a) {
+logistic_sigmoid(expression_ptr<derived_ptr<A>> &&a) {
 	return std::make_unique<expr::logistic_sigmoid<A>>(std::move(a).transfer_cast());
 }
 
 template<class A>
 derived_ptr<expr::softmax<A>>
-softmax(expression_ptr<A> &&a) {
+softmax(expression_ptr<derived_ptr<A>> &&a) {
 	return std::make_unique<expr::softmax<A>>(std::move(a).transfer_cast());
 }
 
