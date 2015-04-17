@@ -286,7 +286,6 @@ private:
 	Eigen::Matrix<F,RowsAtCompileTime,ColsAtCompileTime,StorageOrder> result_;
 };
 
-/*
 template<class A>
 class logistic_sigmoid {
 public:
@@ -297,12 +296,18 @@ public:
 		StorageOrder = A::StorageOrder
 	};
 
-	logistic_sigmoid(std::unique_ptr<expression<A>> &&a) :
-		a_(std::move(a).transfer_cast()),
-		result_(F(1) / (F(1) + (-((*a_)().eval())).array().exp())) {}
+	logistic_sigmoid(expression_ptr<derived_ptr<A>> &&a) :
+			a_(std::move(a).transfer_cast()) {
+		a_([this] (auto &&a) { this->result_ = F(1) / (F(1) + (-a).array().exp()); });
+	}
 
 	auto operator()() const {
 		return result_.matrix();
+	}
+
+	template<class F>
+	auto operator()(F &&f) const {
+		return std::forward<F>(f)(result_.matrix());
 	}
 
 	template<class Derived>
@@ -311,7 +316,7 @@ public:
 	}
 
 private:
-	A a_;
+	derived_ptr<A> a_;
 	typedef Eigen::Array<F,RowsAtCompileTime,ColsAtCompileTime,StorageOrder> array_type;
 	array_type result_;
 };
@@ -327,18 +332,24 @@ public:
 	};
 
 private:
-	typedef Eigen::Array<F,RowsAtCompileTime,ColsAtCompileTime,StorageOrder> array_;
+	typedef Eigen::Array<F,RowsAtCompileTime,ColsAtCompileTime,StorageOrder> array_type;
 
 public:
-	softmax(const expression<A> &a) :
-			a_(a.cast()) {
-		const auto &eval_a = a_().eval().array();
-		array_ t = (eval_a.colwise() - eval_a.rowwise().maxCoeff()).exp();
+	softmax(expression_ptr<derived_ptr<A>> &&a) :
+			a_(std::move(a).transfer_cast()) {
+		array_type eval_a;
+		a_([&eval_a] (auto &&a) { eval_a = a.array(); });
+		array_type t = (eval_a.colwise() - eval_a.rowwise().maxCoeff()).exp();
 		result_ = t.colwise() / t.rowwise().sum();
 	}
 
 	auto operator()() const {
 		return result_.matrix();
+	}
+
+	template<class F>
+	auto operator()(F &&f) const {
+		return std::forward<F>(f)(result_);
 	}
 
 	template<class Derived>
@@ -347,10 +358,9 @@ public:
 	}
 
 private:
-	const A &a_;
-	array_ result_;
+	derived_ptr<A> a_;
+	array_type result_;
 };
-*/
 
 } // namespace expr
 
@@ -392,19 +402,17 @@ operator*(expression_ptr<derived_ptr<A>> &&a, expression_ptr<derived_ptr<B>> &&b
 		std::make_unique<expr::matmul<A,B>>(std::move(a).transfer_cast(), std::move(b).transfer_cast()));
 }
 
-/*
 template<class A>
 derived_ptr<expr::logistic_sigmoid<A>>
-logistic_sigmoid(expression_ptr<A> &a) {
-	return expr::detail::make_derived<expr::logistic_sigmoid<A>>(std::move(a));
+logistic_sigmoid(expression_ptr<A> &&a) {
+	return std::make_unique<expr::logistic_sigmoid<A>>(std::move(a).transfer_cast());
 }
 
 template<class A>
-expr::softmax<A>
-softmax(const expression<A> &a) {
-	return expr::softmax<A>(a);
+derived_ptr<expr::softmax<A>>
+softmax(expression_ptr<A> &&a) {
+	return std::make_unique<expr::softmax<A>>(std::move(a).transfer_cast());
 }
-*/
 
 } // namespace netops
 
