@@ -344,14 +344,12 @@ derived_ptr<expr::output_matrix<A>>
 eval(expression_ptr<derived_ptr<A>> &&a) {
 	return derived_ptr<expr::output_matrix<A>>(
 		std::make_unique<expr::output_matrix<A>>(std::move(a).transfer_cast()));
-	//return expr::detail::make_derived<expr::output_matrix<A>>(std::move(a));
 }
 
 template<class A>
 derived_ptr<expr::input_matrix<A>>
 input_matrix(const Eigen::MatrixBase<A> &mat) {
 	return derived_ptr<expr::input_matrix<A>>(std::make_unique<expr::input_matrix<A>>(mat.derived()));
-	//return expr::detail::make_derived<expr::input_matrix<A>>(mat.derived());
 }
 
 template<class A,class B>
@@ -360,7 +358,6 @@ weight_matrix(const Eigen::MatrixBase<A> &mat, const Eigen::MatrixBase<B> &grad)
 	// const_cast according to Eigen manual
 	return derived_ptr<expr::weight_matrix<A,B>>(
 		std::make_unique<expr::weight_matrix<A,B>>(mat, const_cast<B &>(grad.derived())));
-	//return expr::detail::make_derived<expr::weight_matrix<A,B>>(mat, const_cast<B &>(grad.derived()));
 }
 
 template<class A,class B>
@@ -368,7 +365,6 @@ std::enable_if_t<B::RowsAtCompileTime==1,derived_ptr<expr::rowwise_add<A,B>>>
 operator+(expression_ptr<derived_ptr<A>> &&a, expression_ptr<derived_ptr<B>> &&b) {
 	return derived_ptr<expr::rowwise_add<A,B>>(
 		std::make_unique<expr::rowwise_add<A,B>>(std::move(a).transfer_cast(), std::move(b).transfer_cast()));
-	//return expr::detail::make_derived<expr::rowwise_add<A,B>>(std::move(a), std::move(b));
 }
 
 template<class A,class B>
@@ -376,7 +372,6 @@ derived_ptr<expr::matmul<A,B>>
 operator*(expression_ptr<derived_ptr<A>> &&a, expression_ptr<derived_ptr<B>> &&b) {
 	return derived_ptr<expr::matmul<A,B>>(
 		std::make_unique<expr::matmul<A,B>>(std::move(a).transfer_cast(), std::move(b).transfer_cast()));
-	//return expr::detail::make_derived<expr::matmul<A,B>>(std::move(a), std::move(b));
 }
 
 /*
