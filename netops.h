@@ -95,7 +95,6 @@ public:
 	output_matrix(expression_ptr<derived_ptr<A>> &&expr) :
 			expr_(std::move(expr).transfer_cast()){
 		expr_([this] (auto &&x) { this->matrix_ = x; });
-		std::cerr << "Created output_matrix.\n";
 	}
 
 	const matrix_type &operator()() const {
@@ -105,10 +104,6 @@ public:
 	template<class Derived>
 	void bprop(const Eigen::MatrixBase<Derived> &in) const {
 		expr_.bprop(in);
-	}
-
-	~output_matrix() {
-		std::cerr << "Destroyed output_matrix.\n";
 	}
 
 private:
@@ -133,9 +128,7 @@ public:
 		StorageOrder = A::IsRowMajor ? Eigen::RowMajor : Eigen::ColMajor
 	};
 
-	input_matrix(const A &mat) : mat_(mat) {
-		std::cerr << "Created input_matrix.\n";
-	}
+	input_matrix(const A &mat) : mat_(mat) {}
 
 	const A &operator()() const {
 		return mat_;
@@ -148,10 +141,6 @@ public:
 
 	template<class Derived>
 	void bprop(const Eigen::MatrixBase<Derived> &in) const {}
-
-	~input_matrix() {
-		std::cerr << "Destroyed input_matrix.\n";
-	}
 
 private:
 	const A &mat_;
@@ -170,7 +159,6 @@ public:
 	weight_matrix(const Eigen::MatrixBase<A> &weights, const Eigen::MatrixBase<B> &gradients) :
 			weights_(weights), gradients_(const_cast<B&>(gradients.derived())) {
 		gradients_.setZero();
-		std::cerr << "Created weight_matrix.\n";
 	}
 
 	const Eigen::MatrixBase<A> &operator()() const {
@@ -185,10 +173,6 @@ public:
 	template<class Derived>
 	void bprop(const Eigen::MatrixBase<Derived> &in) const {
 		gradients_ += in;
-	}
-
-	~weight_matrix() {
-		std::cerr << "Destroyed weight_matrix.\n";
 	}
 
 private:
@@ -207,9 +191,7 @@ public:
 	};
 
 	rowwise_add(expression_ptr<derived_ptr<A>> &&a, expression_ptr<derived_ptr<B>> &&b) :
-		a_(std::move(a).transfer_cast()), b_(std::move(b).transfer_cast()) {
-		std::cerr << "Created rowwise_add.\n";
-	}
+		a_(std::move(a).transfer_cast()), b_(std::move(b).transfer_cast()) {}
 
 	auto operator()() const {
 		Eigen::Matrix<F,RowsAtCompileTime,ColsAtCompileTime,StorageOrder> out;
@@ -233,10 +215,6 @@ public:
 		b_.bprop(eval_in.colwise().sum());
 	}
 
-	~rowwise_add() {
-		std::cerr << "Destroyed rowwise_add.\n";
-	}
-
 private:
 	derived_ptr<A> a_;
 	derived_ptr<B> b_;
@@ -257,7 +235,6 @@ public:
 		detail::binary_cont(a_, b_, [this] (auto &&a, auto &&b) {
 			this->result_ = std::forward<decltype(a)>(a) * std::forward<decltype(b)>(b);
 		});
-		std::cerr << "Created matmul.\n";
 	}
 
 	const auto &operator()() const {
@@ -274,10 +251,6 @@ public:
 		const auto &eval_in = in.eval();
 		b_([this, &eval_in] (auto &&b) { this->a_.bprop(eval_in * b.transpose()); });
 		a_([this, &eval_in] (auto &&a) { this->b_.bprop(a.transpose() * eval_in); });
-	}
-
-	~matmul() {
-		std::cerr << "Destroyed matmul.\n";
 	}
 
 private:
