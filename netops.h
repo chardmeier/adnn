@@ -137,6 +137,10 @@ public:
 		std::cerr << "Created input_matrix.\n";
 	}
 
+	const A &operator()() const {
+		return mat_;
+	}
+
 	template<class F>
 	auto operator()(F &&f) const {
 		return std::forward<F>(f)(mat_);
@@ -167,6 +171,10 @@ public:
 			weights_(weights), gradients_(const_cast<B&>(gradients.derived())) {
 		gradients_.setZero();
 		std::cerr << "Created weight_matrix.\n";
+	}
+
+	const Eigen::MatrixBase<A> &operator()() const {
+		return weights_;
 	}
 
 	template<class F>
@@ -201,6 +209,12 @@ public:
 	rowwise_add(expression_ptr<derived_ptr<A>> &&a, expression_ptr<derived_ptr<B>> &&b) :
 		a_(std::move(a).transfer_cast()), b_(std::move(b).transfer_cast()) {
 		std::cerr << "Created rowwise_add.\n";
+	}
+
+	auto operator()() const {
+		Eigen::Matrix<F,RowsAtCompileTime,ColsAtCompileTime,StorageOrder> out;
+		operator()([&out] (auto &&a) { out = a; });
+		return out;
 	}
 
 	template<class F>
@@ -244,6 +258,10 @@ public:
 			this->result_ = std::forward<decltype(a)>(a) * std::forward<decltype(b)>(b);
 		});
 		std::cerr << "Created matmul.\n";
+	}
+
+	const auto &operator()() const {
+		return result_;
 	}
 
 	template<class F>
