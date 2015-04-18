@@ -1,6 +1,7 @@
 #ifndef NNET_NNET_H
 #define NNET_NNET_H
 
+#include <chrono>
 #include <cmath>
 #include <iostream>
 #include <type_traits>
@@ -14,6 +15,7 @@
 #include <boost/fusion/include/deref.hpp>
 #include <boost/fusion/include/end.hpp>
 #include <boost/fusion/include/flatten.hpp>
+#include <boost/fusion/include/for_each.hpp>
 #include <boost/fusion/include/make_cons.hpp>
 #include <boost/fusion/include/make_vector.hpp>
 #include <boost/fusion/include/size.hpp>
@@ -27,6 +29,12 @@
 #endif
 
 namespace nnet {
+
+template<class F,int Rows = Eigen::Dynamic,int Cols = Eigen::Dynamic>
+using std_matrix = Eigen::Matrix<F,Rows,Cols,Eigen::RowMajor>;
+
+template<class F,int Rows = Eigen::Dynamic,int Cols = Eigen::Dynamic>
+using std_array = Eigen::Array<F,Rows,Cols,Eigen::RowMajor>;
 
 // for debugging only
 template<class E>
@@ -68,7 +76,7 @@ struct sigmoid {
 	template<class Derived>
 	struct functor {
 		typedef Eigen::MatrixBase<typename std::remove_const<typename std::remove_reference<Derived>::type>::type> matrix_base;
-		auto operator()(const matrix_base &x) const {
+		std_matrix<typename matrix_base::Scalar> operator()(const matrix_base &x) const {
 			typedef typename matrix_base::Scalar F;
 			return (F(1) / (F(1) + (-x).array().unaryExpr(exp_functor<F>()))).matrix();
 		}
@@ -80,9 +88,9 @@ struct softmax {
 	template<class Derived>
 	struct functor {
 		typedef Eigen::MatrixBase<typename std::remove_const<typename std::remove_reference<Derived>::type>::type> matrix_base;
-		auto operator()(const matrix_base &x) const {
+		std_matrix<typename matrix_base::Scalar> operator()(const matrix_base &x) const {
 			typedef typename matrix_base::Scalar F;
-			auto a = (x.array().colwise() - x.array().rowwise().maxCoeff()).unaryExpr(exp_functor<F>());
+			std_array<F> a = (x.array().colwise() - x.array().rowwise().maxCoeff()).unaryExpr(exp_functor<F>());
 			return (a.colwise() / a.rowwise().sum()).matrix();
 		}
 		//typedef decltype(DECLVAL(functor<Derived> )()(DECLVAL(matrix_base)())) result_type;
@@ -94,12 +102,6 @@ auto invoke_activation(const Matrix &mat) {
 	typename Activation::template functor<Matrix> fn;
 	return fn(mat);
 }
-
-template<class F,int Rows = Eigen::Dynamic,int Cols = Eigen::Dynamic>
-using std_matrix = Eigen::Matrix<F,Rows,Cols>;
-
-template<class F,int Rows = Eigen::Dynamic,int Cols = Eigen::Dynamic>
-using std_array = Eigen::Array<F,Rows,Cols>;
 
 struct mat_size {
 	std::size_t rows;
@@ -281,13 +283,13 @@ public:
 	}
 
 	template<int N>
-	auto at() {
+	auto &at() {
 		using namespace boost::fusion;
 		return deref(advance_c<N>(begin(mat_)));
 	}
 
 	template<int N>
-	const auto at() const {
+	const auto &at() const {
 		using namespace boost::fusion;
 		return deref(advance_c<N>(begin(mat_)));
 	}
@@ -326,14 +328,14 @@ auto create_weight_maps<FF>::process_sequence(const It1 &it1, const It2 &it2, FF
 
 template<class FF>
 auto create_weight_maps<FF>::process_element(const mat_size &e, FF *data) const {
-	typedef Eigen::Map<Eigen::Matrix<FF,Eigen::Dynamic,Eigen::Dynamic> > map_type;
+	typedef Eigen::Map<std_matrix<FF> > map_type;
 	FF *newpos = data + e.rows * e.cols;
 	return std::make_pair(map_type(data, e.rows, e.cols), newpos);
 }
 
 template<class FF>
 auto create_weight_maps<FF>::process_element(const vec_size &e, FF *data) const {
-	typedef Eigen::Map<Eigen::Matrix<FF,1,Eigen::Dynamic> > map_type;
+	typedef Eigen::Map<std_matrix<FF,1> > map_type;
 	FF *newpos = data + e.cols;
 	return std::make_pair(map_type(data, e.cols), newpos);
 }
