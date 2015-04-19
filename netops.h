@@ -8,21 +8,6 @@
 
 namespace netops {
 
-namespace expr {
-
-namespace detail {
-
-/*
-template<class Derived,class Base,class Del>
-std::unique_ptr<Derived,Del>
-cast(std::unique_ptr<Base,Del> &&p) {
-	auto d = static_cast<Derived *>(p.release());
-	return std::unique_ptr<Derived,Del>(d, std::move(p.get_deleter()));
-}
-*/
-
-} // namespace detail
-
 template<class A> class derived_ptr;
 
 template<class Derived>
@@ -71,6 +56,8 @@ public:
 private:
 	std::unique_ptr<A> ptr_;
 };
+
+namespace expr {
 
 namespace detail {
 
@@ -341,9 +328,6 @@ private:
 };
 
 } // namespace expr
-
-using expr::expression_ptr;
-using expr::derived_ptr;
 
 template<class A>
 derived_ptr<expr::output_matrix<A>>
