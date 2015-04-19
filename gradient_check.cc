@@ -3,11 +3,13 @@
 #include "nnet.h"
 #include "netops.h"
 
-typedef Eigen::Matrix<float,Eigen::Dynamic,Eigen::Dynamic> matrix;
-typedef Eigen::Matrix<float,1,Eigen::Dynamic> vector;
+typedef double Float;
+
+typedef Eigen::Matrix<Float,Eigen::Dynamic,Eigen::Dynamic> matrix;
+typedef Eigen::Matrix<Float,1,Eigen::Dynamic> vector;
 
 typedef boost::fusion::vector4<nnet::mat_size,nnet::vec_size,nnet::mat_size,nnet::vec_size> spec_type;
-typedef nnet::weights<float,spec_type> weights;
+typedef nnet::weights<Float,spec_type> weights;
 
 void get_data(matrix &inputs, matrix &targets);
 
@@ -24,24 +26,24 @@ auto make_net(const matrix &input, const weights &ww, weights &grad) {
 
 template<int N>
 void check(const matrix &input, const weights &ww, const weights &grad, const matrix &targets, int i, int j) {
-	const float EPS = 1e-4f;
+	const Float EPS = 1e-4f;
 
 	weights disturb(ww);
 	weights xgrad(ww);
 
-	float ow = ww.template at<N>()(i,j);
+	Float ow = ww.template at<N>()(i,j);
 
 	disturb.template at<N>()(i,j) = ow + EPS;
 	auto net1 = make_net(input, disturb, xgrad);
 	matrix out1 = net1();
-	float j1 = -targets.cwiseProduct(out1.array().log().matrix()).sum();
+	Float j1 = -targets.cwiseProduct(out1.array().log().matrix()).sum();
 
 	disturb.template at<N>()(i,j) = ow - EPS;
 	auto net2 = make_net(input, disturb, xgrad);
 	matrix out2 = net2();
-	float j2 = -targets.cwiseProduct(out2.array().log().matrix()).sum();
+	Float j2 = -targets.cwiseProduct(out2.array().log().matrix()).sum();
 
-	float g = (j1 - j2) / (2 * EPS);
+	Float g = (j1 - j2) / (2 * EPS);
 
 	std::cout << N << '(' << i << ',' << j << "): " << g << " == " << grad.template at<N>()(i,j) << std::endl;
 }
