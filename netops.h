@@ -63,6 +63,11 @@ public:
 		ptr_->bprop(in);
 	}
 
+	template<class Derived>
+	void bprop_loss(const Eigen::MatrixBase<Derived> &in) const {
+		ptr_->bprop_loss(in);
+	}
+
 private:
 	std::unique_ptr<A> ptr_;
 };
@@ -295,7 +300,7 @@ private:
 };
 
 template<class A>
-class softmax {
+class softmax_crossentropy {
 public:
 	typedef typename A::F F;
 	enum {
@@ -308,7 +313,7 @@ private:
 	typedef Eigen::Array<F,RowsAtCompileTime,ColsAtCompileTime,StorageOrder> array_type;
 
 public:
-	softmax(expression_ptr<derived_ptr<A>> &&a) :
+	softmax_crossentropy(expression_ptr<derived_ptr<A>> &&a) :
 			a_(std::move(a).transfer_cast()) {
 		array_type eval_a;
 		a_([&eval_a] (auto &&a) { eval_a = a.array(); });
@@ -326,8 +331,8 @@ public:
 	}
 
 	template<class Derived>
-	void bprop(const Eigen::MatrixBase<Derived> &in) const {
-		a_.bprop((in.array() * result_ * (1 - result_)).matrix());
+	void bprop_loss(const Eigen::MatrixBase<Derived> &targets) const {
+		a_.bprop(result_.matrix() - targets);
 	}
 
 private:
@@ -382,9 +387,9 @@ logistic_sigmoid(expression_ptr<derived_ptr<A>> &&a) {
 }
 
 template<class A>
-derived_ptr<expr::softmax<A>>
-softmax(expression_ptr<derived_ptr<A>> &&a) {
-	return std::make_unique<expr::softmax<A>>(std::move(a).transfer_cast());
+derived_ptr<expr::softmax_crossentropy<A>>
+softmax_crossentropy(expression_ptr<derived_ptr<A>> &&a) {
+	return std::make_unique<expr::softmax_crossentropy<A>>(std::move(a).transfer_cast());
 }
 
 } // namespace netops
