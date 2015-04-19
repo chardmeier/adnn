@@ -19,7 +19,7 @@ auto make_net(const matrix &input, const weights &ww, weights &grad) {
 	auto &&W2 = weight_matrix(ww.template at<2>(), grad.template at<2>());
 	auto &&B2 = weight_matrix(ww.template at<3>(), grad.template at<3>());
 
-	return eval(softmax(logistic_sigmoid(input_matrix(input) * std::move(W1) + std::move(B1)) * std::move(W2) + std::move(B2)));
+	return softmax_crossentropy(logistic_sigmoid(input_matrix(input) * std::move(W1) + std::move(B1)) * std::move(W2) + std::move(B2));
 }
 
 template<int N>
@@ -59,7 +59,7 @@ int main() {
 
 	auto base_net = make_net(input, ww, grad);
 	matrix out = base_net();
-	base_net.bprop(out - targets);
+	base_net.bprop_loss(targets);
 
 	check<0>(input, ww, grad, targets, 3, 3);
 	check<0>(input, ww, grad, targets, 2, 4);
