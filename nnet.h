@@ -16,6 +16,7 @@
 #include <boost/fusion/include/end.hpp>
 #include <boost/fusion/include/flatten.hpp>
 #include <boost/fusion/include/for_each.hpp>
+#include <boost/fusion/include/is_sequence.hpp>
 #include <boost/fusion/include/make_cons.hpp>
 #include <boost/fusion/include/make_vector.hpp>
 #include <boost/fusion/include/size.hpp>
@@ -103,49 +104,90 @@ auto invoke_activation(const Matrix &mat) {
 	return fn(mat);
 }
 
-struct mat_size {
-	std::size_t rows;
-	std::size_t cols;
+template<class Derived>
+struct spec {
+	const Derived &cast() const {
+		return static_cast<const Derived &>(*this);
+	}
+
+	std::size_t rows() const {
+		return cast().rows();
+	}
+
+	std::size_t cols() const {
+		return cast().cols();
+	}
+
+	std::size_t size() const {
+		return rows() * cols();
+	}
+};
+
+template<class F,int TStorageOrder = Eigen::RowMajor>
+struct mat_size : public spec<mat_size<F,TStorageOrder>> {
+	enum {
+		RowsAtCompileTime = Eigen::Dynamic,
+		ColsAtCompileTime = Eigen::Dynamic,
+		StorageOrder = TStorageOrder
+	};
+	typedef F float_type;
 
 	mat_size() {}
 
 	mat_size(std::size_t r, std::size_t c) :
-		rows(r), cols(c) {}
+		rows_(r), cols_(c) {}
+
+	std::size_t rows() const {
+		return rows_;
+	}
+
+	std::size_t cols() const {
+		return cols_;
+	}
 
 	bool operator==(const mat_size &o) const {
-		return rows == o.rows && cols == o.cols;
+		return rows_ == o.rows_ && cols_ == o.cols_;
 	}
+
+private:
+	std::size_t rows_;
+	std::size_t cols_;
 };
 
-struct vec_size {
-	std::size_t cols;
+template<class F,int TStorageOrder = Eigen::RowMajor>
+struct vec_size : public spec<vec_size<F,TStorageOrder>> {
+	enum {
+		RowsAtCompileTime = 1,
+		ColsAtCompileTime = Eigen::Dynamic,
+		StorageOrder = TStorageOrder
+	};
+	typedef F float_type;
 
 	vec_size() {}
 
 	vec_size(std::size_t c) :
-		cols(c) {}
+		cols_(c) {}
+
+	std::size_t rows() const {
+		return 1;
+	}
+
+	std::size_t cols() const {
+		return cols_;
+	}
 
 	bool operator==(const vec_size &o) const {
-		return cols == o.cols;
+		return cols_ == o.cols_;
 	}
+
+private:
+	std::size_t cols_;
 };
 
 template<class FF,class Spec,class Array = std_array<FF> >
 class weights;
 
 namespace detail {
-
-struct compute_weight_size {
-	typedef std::size_t result_type;
-
-	std::size_t operator()(const std::size_t &s, const mat_size &e) const {
-		return s + e.rows * e.cols;
-	}
-
-	std::size_t operator()(const std::size_t &s, const vec_size &e) const {
-		return s + e.cols;
-	}
-};
 
 template<class FF>
 struct create_weight_maps {
@@ -165,11 +207,11 @@ struct create_weight_maps {
 	template<class It1,class It2>
 	auto process_sequence(const It1 &it1, const It2 &it2, FF *data) const;
 
-	auto process_element(const mat_size &e, FF *data) const;
-	auto process_element(const vec_size &e, FF *data) const;
+	template<class Type>
+	auto process_element(const spec<Type> &e, FF *data) const;
 
 	template<class Sequence>
-	auto process_element(const Sequence &s, FF *data) const;
+	auto process_element(const Sequence &s, FF *data, std::enable_if_t<boost::fusion::traits::is_sequence<Sequence>::type::value>* = nullptr) const;
 };
 
 template<typename>
@@ -185,14 +227,6 @@ class weights {
 private:
 	template<typename,typename,typename> friend class weights;
 
-/*
-	typedef typename boost::fusion::result_of::accumulate<
-			Spec,
-			std::pair<FF*,boost::fusion::list<> >,
-			detail::create_weight_maps<FF,Spec> >::type::second_type
-		map_type;
-*/
-
 	Spec spec_;
 	Array data_;
 
@@ -205,9 +239,8 @@ public:
 
 	weights(const spec_type &spec) :
 			spec_(spec),
-			data_(boost::fusion::accumulate(boost::fusion::flatten(spec_), std::size_t(0), detail::compute_weight_size()), 1),
+			data_(boost::fusion::accumulate(boost::fusion::flatten(spec_), std::size_t(0), [] (std::size_t s, const auto &spec) { return s + spec.size(); }), 1),
 			mat_(detail::create_weight_maps<FF>().process_sequence(spec_, data_.data())) {}
-			//mat_(boost::fusion::accumulate(spec_, std::make_pair(data_.data(), boost::fusion::list<>()), detail::create_weight_maps<FF,Spec>()).second) {}
 
 	// Eigen::Map has no copy constructor
 	template<class P,int O,class S,class A1 = Array>
@@ -216,7 +249,6 @@ public:
 			spec_(spec),
 			data_(data.data(), data.rows(), data.cols()),
 			mat_(detail::create_weight_maps<FF>().process_sequence(spec_, data_.data())) {}
-			//mat_(boost::fusion::accumulate(spec_, std::make_pair(data_.data(), boost::fusion::list<>()), detail::create_weight_maps<FF,Spec>()).second) {}
 
 	template<class Derived,class A1 = Array>
 	weights(const spec_type &spec, const Eigen::ArrayBase<Derived> &data,
@@ -224,13 +256,11 @@ public:
 			spec_(spec),
 			data_(data),
 			mat_(detail::create_weight_maps<FF>().process_sequence(spec_, data_.data())) {}
-			//mat_(boost::fusion::accumulate(spec_, std::make_pair(data_.data(), boost::fusion::list<>()), detail::create_weight_maps<FF,Spec>()).second) {}
 
 	weights(const spec_type &spec, const FF &value) :
 			spec_(spec),
-			data_(boost::fusion::accumulate(boost::fusion::flatten(spec_), std::size_t(0), detail::compute_weight_size()), 1),
+			data_(boost::fusion::accumulate(boost::fusion::flatten(spec_), std::size_t(0), [] (std::size_t s, const auto &spec) { return s + spec.size(); }), 1),
 			mat_(detail::create_weight_maps<FF>().process_sequence(spec_, data_.data())) {
-			//mat_(boost::fusion::accumulate(spec_, std::make_pair(data_.data(), boost::fusion::list<>()), detail::create_weight_maps<FF,Spec>()).second) {
 		data_.setConstant(value);
 	}
 
@@ -239,13 +269,11 @@ public:
 			spec_(o.spec_),
 			data_(o.data_.template cast<FF>()),
 			mat_(detail::create_weight_maps<FF>().process_sequence(spec_, data_.data())) {}
-			//mat_(boost::fusion::accumulate(spec_, std::make_pair(data_.data(), boost::fusion::list<>()), detail::create_weight_maps<FF,Spec>()).second) {}
 
 	weights(const weights<FF,Spec,Array> &o) :
 			spec_(o.spec_),
 			data_(o.data_),
 			mat_(detail::create_weight_maps<FF>().process_sequence(spec_, data_.data())) {}
-			//mat_(boost::fusion::accumulate(spec_, std::make_pair(data_.data(), boost::fusion::list<>()), detail::create_weight_maps<FF,Spec>()).second) {}
 
 	template<class OtherArray>
 	weights<FF,Spec,Array> &operator=(const weights<FF,Spec,OtherArray> &o) {
@@ -327,6 +355,15 @@ auto create_weight_maps<FF>::process_sequence(const It1 &it1, const It2 &it2, FF
 }
 
 template<class FF>
+template<class Type>
+auto create_weight_maps<FF>::process_element(const spec<Type> &e, FF *data) const {
+	typedef Eigen::Map<Eigen::Matrix<FF,Type::RowsAtCompileTime,Type::ColsAtCompileTime,Type::StorageOrder>> map_type;
+	FF *newpos = data + e.size();
+	return std::make_pair(map_type(data, e.rows(), e.cols()), newpos);
+}
+
+/*
+template<class FF>
 auto create_weight_maps<FF>::process_element(const mat_size &e, FF *data) const {
 	typedef Eigen::Map<std_matrix<FF> > map_type;
 	FF *newpos = data + e.rows * e.cols;
@@ -339,10 +376,11 @@ auto create_weight_maps<FF>::process_element(const vec_size &e, FF *data) const 
 	FF *newpos = data + e.cols;
 	return std::make_pair(map_type(data, e.cols), newpos);
 }
+*/
 
 template<class FF>
 template<class Sequence>
-auto create_weight_maps<FF>::process_element(const Sequence &s, FF *data) const {
+auto create_weight_maps<FF>::process_element(const Sequence &s, FF *data, std::enable_if_t<boost::fusion::traits::is_sequence<Sequence>::type::value>*) const {
 	using namespace boost::fusion;
 	auto l = process_sequence(begin(s), end(s), data);
 	return std::make_pair(as_vector(l.first), l.second);
