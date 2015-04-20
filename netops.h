@@ -5,6 +5,8 @@
 #include <type_traits>
 
 #include <boost/fusion/include/at.hpp>
+#include <boost/fusion/include/fold.hpp>
+#include <boost/fusion/include/mpl.hpp>
 #include <boost/mpl/front.hpp>
 #include <boost/mpl/pop_front.hpp>
 #include <boost/mpl/vector.hpp>
@@ -48,13 +50,13 @@ public:
 		return (*ptr_)(std::forward<Args>(f)...);
 	}
 
-	template<class Derived>
-	void bprop(const Eigen::MatrixBase<Derived> &in) const {
+	template<class Derived,class Data>
+	void bprop(const Eigen::MatrixBase<Derived> &in, const Data &gradients) const {
 		ptr_->bprop(in);
 	}
 
-	template<class Derived>
-	void bprop_loss(const Eigen::MatrixBase<Derived> &in) const {
+	template<class Derived,class Data>
+	void bprop_loss(const Eigen::MatrixBase<Derived> &in, const Data &gradients) const {
 		ptr_->bprop_loss(in);
 	}
 
@@ -75,28 +77,45 @@ auto binary_cont(const derived_ptr<A> &a_, const derived_ptr<B> &b_, const Data 
 	});
 }
 
+/*
 template<class Index,class Sequence>
-struct at_spec {
-	using namespace fusion = boost::fusion;
-	using namespace mpl = boost::mpl;
-
-	typedef typename mpl::front<Index> head;
-	typedef typename mpl::pop_front<Index> tail;
-
-	typedef typename fusion::result_of::at<head,Sequence>::type next_type;
-	typedef typename at_spec<tail,next_type>::result_type result_type;
-
-	result_type operator()(Sequence &seq) const {
-		return at_spec<tail,next_type>()(fusion::at<head>(seq));
-	}
-};
+struct at_spec;
 
 template<class Data>
-struct at_spec<boost::mpl::vector<>,Data> {
+struct at_spec<boost::mpl::void_,Data> {
 	typedef Data result_type;
 
 	result_type operator()(Data &data) const {
 		return data;
+	}
+};
+
+template<class Index,class Sequence>
+struct at_spec {
+	typedef typename boost::mpl::front<Index>::type head;
+	typedef typename boost::mpl::pop_front<Index>::type tail;
+
+	typedef typename boost::fusion::result_of::at<Sequence,head>::type next_type;
+	typedef typename at_spec<tail,next_type>::result_type result_type;
+
+	result_type operator()(Sequence &seq) const {
+		return at_spec<tail,next_type>()(boost::fusion::at<head>(seq));
+	}
+};
+*/
+
+struct spec_hop {
+	template<class State,class Index>
+	auto operator()(State &&s, Index e) const {
+		return boost::fusion::at<Index>(std::forward<State>(s));
+	}
+};
+
+template<class Index,class Sequence>
+struct at_spec {
+	typedef typename boost::fusion::result_of::fold<Index,Sequence,spec_hop>::type type;
+	auto operator()(Sequence &seq) const {
+		return boost::fusion::fold(Index(), seq, spec_hop());
 	}
 };
 
@@ -136,7 +155,7 @@ private:
 template<class Index,class Spec>
 class input_matrix {
 private:
-	typedef typename at_spec<Index,Spec>::type spec_type;
+	typedef typename detail::at_spec<Index,Spec>::type spec_type;
 
 public:
 	typedef typename spec_type::float_type F;
@@ -150,22 +169,22 @@ public:
 
 	template<class Data>
 	const auto &operator()(const Data &data) const {
-		return at_spec<Index>(data);
+		return detail::at_spec<Index,const Data>(data);
 	}
 
 	template<class Data,class F>
 	auto operator()(const Data &data, F &&f) const {
-		return std::forward<F>(f)(at_spec<Index>(data));
+		return std::forward<F>(f)(detail::at_spec<Index,const Data>()(data));
 	}
 
 	template<class Derived,class Data>
-	void bprop(const Eigen::MatrixBase<Derived> &in, Data &gradients) const {}
+	void bprop(const Eigen::MatrixBase<Derived> &in, const Data &gradients) const {}
 };
 
 template<class Index,class Spec>
 class weight_matrix {
 private:
-	typedef typename at_spec<Index,Spec>::type spec_type;
+	typedef typename detail::at_spec<Index,Spec>::type spec_type;
 
 public:
 	typedef typename spec_type::float_type F;
@@ -179,17 +198,17 @@ public:
 
 	template<class Data>
 	const auto &operator()(const Data &data) const {
-		return at_spec<Index>(data);
+		return detail::at_spec<Index,const Data>(data);
 	}
 
 	template<class Data,class F>
 	auto operator()(const Data &data, F &&f) const {
-		return std::forward<F>(f)(at_spec<Index>(data));
+		return std::forward<F>(f)(detail::at_spec<Index,const Data>()(data));
 	}
 
 	template<class Derived,class Data>
-	void bprop(const Eigen::MatrixBase<Derived> &in, Data &gradients) const {
-		at_spec<Index>(gradients) += in;
+	void bprop(const Eigen::MatrixBase<Derived> &in, const Data &gradients) const {
+		detail::at_spec<Index,const Data>(gradients) += in;
 	}
 };
 
@@ -206,7 +225,7 @@ public:
 	rowwise_add(expression_ptr<derived_ptr<A>> &&a, expression_ptr<derived_ptr<B>> &&b) :
 		a_(std::move(a).transfer_cast()), b_(std::move(b).transfer_cast()) {}
 
-	template<class F>
+	template<class Data,class F>
 	auto operator()(const Data &data, F &&f) const {
 		return detail::binary_cont(a_, b_, data,
 			[f = std::forward<F>(f)] (auto &&a, auto &&b) {
@@ -216,7 +235,7 @@ public:
 	}
 
 	template<class Derived,class Data>
-	void bprop(const Eigen::MatrixBase<Derived> &in, Data &gradients) const {
+	void bprop(const Eigen::MatrixBase<Derived> &in, const Data &gradients) const {
 		const auto &eval_in = in.eval();
 		a_.bprop(eval_in, gradients);
 		b_.bprop(eval_in.colwise().sum(), gradients);
@@ -244,12 +263,12 @@ public:
 	template<class Data,class F>
 	auto operator()(const Data &data, F &&f) const {
 		detail::binary_cont(a_, b_, data, [f = std::forward<F>(f)] (auto &&a, auto &&b) {
-			return std::forward<F>(f)(std::forward<decltype(a)>(a) * std::forward<decltype(b)>(b));
+			return std::forward<decltype(f)>(f)(std::forward<decltype(a)>(a) * std::forward<decltype(b)>(b));
 		});
 	}
 
 	template<class Derived,class Data>
-	void bprop(const Eigen::MatrixBase<Derived> &in, Data &gradients) const {
+	void bprop(const Eigen::MatrixBase<Derived> &in, const Data &gradients) const {
 		const auto &eval_in = in.eval();
 		b_([this, &eval_in, &gradients] (auto &&b) { this->a_.bprop(eval_in * b.transpose(), gradients); });
 		a_([this, &eval_in, &gradients] (auto &&a) { this->b_.bprop(a.transpose() * eval_in, gradients); });
@@ -280,7 +299,7 @@ public:
 	}
 
 	template<class Derived,class Data>
-	void bprop(const Eigen::MatrixBase<Derived> &in, Data &gradients) const {
+	void bprop(const Eigen::MatrixBase<Derived> &in, const Data &gradients) const {
 		a_.bprop((in.array() * result_ * (1 - result_)).matrix(), gradients);
 	}
 
@@ -317,7 +336,7 @@ public:
 	}
 
 	template<class Derived,class Data>
-	void bprop_loss(const Eigen::MatrixBase<Derived> &targets, Data &gradients) const {
+	void bprop_loss(const Eigen::MatrixBase<Derived> &targets, const Data &gradients) const {
 		a_.bprop(result_.matrix() - targets, gradients);
 	}
 
@@ -331,7 +350,7 @@ private:
 template<class A>
 derived_ptr<expr::output_matrix<A>>
 eval(expression_ptr<derived_ptr<A>> &&a) {
-	std::make_unique<expr::output_matrix<A>>(std::move(a).transfer_cast());
+	return std::make_unique<expr::output_matrix<A>>(std::move(a).transfer_cast());
 }
 
 template<class Index,class Spec>
