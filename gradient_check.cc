@@ -1,18 +1,26 @@
 #include <iostream>
 
+#include <boost/fusion/include/make_vector.hpp>
+#include <boost/fusion/include/vector.hpp>
+#include <boost/mpl/vector_c.hpp>
+
 #include "nnet.h"
 #include "netops.h"
+
+namespace fusion = boost::fusion;
+namespace mpl = boost::mpl;
 
 typedef double Float;
 
 typedef Eigen::Matrix<Float,Eigen::Dynamic,Eigen::Dynamic> matrix;
 typedef Eigen::Matrix<Float,1,Eigen::Dynamic> vector;
 
-typedef boost::fusion::vector4<nnet::mat_size,nnet::vec_size,nnet::mat_size,nnet::vec_size> spec_type;
+typedef boost::fusion::vector4<nnet::mat_size<Float>,nnet::vec_size<Float>,nnet::mat_size<Float>,nnet::vec_size<Float>> spec_type;
 typedef nnet::weights<Float,spec_type> weights;
 
 void get_data(matrix &inputs, matrix &targets);
 
+/*
 auto make_net(const matrix &input, const weights &ww, weights &grad) {
 	using namespace netops;
 
@@ -23,9 +31,10 @@ auto make_net(const matrix &input, const weights &ww, weights &grad) {
 
 	return softmax_crossentropy(logistic_sigmoid(input_matrix(input) * std::move(W1) + std::move(B1)) * std::move(W2) + std::move(B2));
 }
+*/
 
-template<int N>
-void check(const matrix &input, const weights &ww, const weights &grad, const matrix &targets, int i, int j) {
+template<int N,class Net>
+void check(const Net &net, const matrix &input, const weights &ww, const weights &grad, const matrix &targets, int i, int j) {
 	const Float EPS = 1e-4f;
 
 	weights disturb(ww);
@@ -34,13 +43,11 @@ void check(const matrix &input, const weights &ww, const weights &grad, const ma
 	Float ow = ww.template at<N>()(i,j);
 
 	disturb.template at<N>()(i,j) = ow + EPS;
-	auto net1 = make_net(input, disturb, xgrad);
-	matrix out1 = net1();
+	matrix out1 = net(fusion::make_vector(input, disturb.sequence()));
 	Float j1 = -targets.cwiseProduct(out1.array().log().matrix()).sum();
 
 	disturb.template at<N>()(i,j) = ow - EPS;
-	auto net2 = make_net(input, disturb, xgrad);
-	matrix out2 = net2();
+	matrix out2 = net(fusion::make_vector(input, disturb.sequence()));
 	Float j2 = -targets.cwiseProduct(out2.array().log().matrix()).sum();
 
 	Float g = (j1 - j2) / (2 * EPS);
@@ -53,24 +60,34 @@ int main() {
 
 	get_data(input, targets);
 
-	spec_type spec(nnet::mat_size(7,10), nnet::vec_size(10), nnet::mat_size(10,3), nnet::vec_size(3));
+	spec_type spec(nnet::mat_size<Float>(7,10), nnet::vec_size<Float>(10), nnet::mat_size<Float>(10,3), nnet::vec_size<Float>(3));
+	auto inputspec = fusion::make_vector(nnet::mat_size<Float>(input.rows(), input.cols()), spec);
+
+	typedef mpl::vector_c<int,0> I;
+	typedef mpl::vector_c<int,1,0> W1;
+	typedef mpl::vector_c<int,1,1> B1;
+	typedef mpl::vector_c<int,1,2> W2;
+	typedef mpl::vector_c<int,1,3> B2;
+
+	using namespace netops;
+	auto net = eval(softmax_crossentropy(logistic_sigmoid(input_matrix<I>(inputspec) * weight_matrix<W1>(inputspec) + weight_matrix<B1>(inputspec)) *
+						weight_matrix<W2>(inputspec) + weight_matrix<B2>(inputspec)));
 
 	weights ww(spec);
 	ww.init_normal(.1);
 	weights grad(spec);
 
-	auto base_net = make_net(input, ww, grad);
-	matrix out = base_net();
-	base_net.bprop_loss(targets);
+	matrix out = net(fusion::make_vector(input, ww.sequence()));
+	net.bprop_loss(targets, fusion::make_vector(mpl::vector_c<int,0>(), grad.sequence()));
 
-	check<0>(input, ww, grad, targets, 3, 3);
-	check<0>(input, ww, grad, targets, 2, 4);
-	check<1>(input, ww, grad, targets, 0, 3);
-	check<1>(input, ww, grad, targets, 0, 6);
-	check<2>(input, ww, grad, targets, 3, 0);
-	check<2>(input, ww, grad, targets, 2, 2);
-	check<3>(input, ww, grad, targets, 0, 1);
-	check<3>(input, ww, grad, targets, 0, 2);
+	check<0>(net, input, ww, grad, targets, 3, 3);
+	check<0>(net, input, ww, grad, targets, 2, 4);
+	check<1>(net, input, ww, grad, targets, 0, 3);
+	check<1>(net, input, ww, grad, targets, 0, 6);
+	check<2>(net, input, ww, grad, targets, 3, 0);
+	check<2>(net, input, ww, grad, targets, 2, 2);
+	check<3>(net, input, ww, grad, targets, 0, 1);
+	check<3>(net, input, ww, grad, targets, 0, 2);
 
 	return 0;
 }
