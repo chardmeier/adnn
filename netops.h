@@ -50,14 +50,21 @@ public:
 		return (*ptr_)(std::forward<Args>(f)...);
 	}
 
-	template<class Derived,class Data>
-	void bprop(const Eigen::MatrixBase<Derived> &in, const Data &gradients) const {
-		ptr_->bprop(in);
+	template<class Data>
+	auto fprop(const Data &data) const {
+		Eigen::Matrix<F,RowsAtCompileTime,ColsAtCompileTime,StorageOrder> matrix;
+		(*ptr_)(data, [&matrix] (auto &&data, auto &&x) { matrix = x; });
+		return matrix;
 	}
 
-	template<class Derived,class Data>
-	void bprop_loss(const Eigen::MatrixBase<Derived> &in, const Data &gradients) const {
-		ptr_->bprop_loss(in);
+	template<class Derived,class Data,class Grads>
+	void bprop(const Eigen::MatrixBase<Derived> &in, const Data &data, const Grads &gradients) const {
+		ptr_->bprop(in, data, gradients);
+	}
+
+	template<class Derived,class Data,class Grads>
+	void bprop_loss(const Eigen::MatrixBase<Derived> &in, const Data &data, const Grads &gradients) const {
+		ptr_->bprop_loss(in, data, gradients);
 	}
 
 private:
@@ -68,11 +75,12 @@ namespace expr {
 
 namespace detail {
 
-template<class Data,class A,class B,class F>
-auto binary_cont(const derived_ptr<A> &a_, const derived_ptr<B> &b_, const Data &data, const F &&f) {
-	return a_(data, [&b_, &data, f = std::forward<const F>(f)] (auto &&a) {
-		return b_(data, [a = std::forward<decltype(a)>(a), f = std::forward<const F>(f)] (auto &&b) {
-			return std::forward<const F>(f)(std::forward<decltype(a)>(a), std::forward<decltype(b)>(b));
+template<class Data,class A,class B,class Fn>
+auto binary_cont(const derived_ptr<A> &a_, const derived_ptr<B> &b_, const Data &data, const Fn &&f) {
+	return a_(data, [&b_, f = std::forward<const Fn>(f)] (auto &&data, auto &&a) {
+		return b_(data, [a = std::forward<decltype(a)>(a), f = std::forward<const Fn>(f)] (auto &&data, auto &&b) {
+			return std::forward<const Fn>(f)(std::forward<decltype(data)>(data),
+				std::forward<decltype(a)>(a), std::forward<decltype(b)>(b));
 		});
 	});
 }
@@ -137,14 +145,14 @@ public:
 			expr_(std::move(expr).transfer_cast()){}
 
 	template<class Data>
-	const matrix_type &operator()(const Data &data) const {
-		expr_(data, [this] (auto &&x) { this->matrix_ = x; });
+	const matrix_type &operator()(const Data &data) {
+		expr_(data, [this] (auto &&data, auto &&x) { this->matrix_ = x; });
 		return matrix_;
 	}
 
-	template<class Derived,class Data>
-	void bprop(const Eigen::MatrixBase<Derived> &in, Data &data) const {
-		expr_.bprop(in, data);
+	template<class Derived,class Data,class Grads>
+	void bprop(const Eigen::MatrixBase<Derived> &in, const Data &data, const Grads &grads) const {
+		expr_.bprop(in, data, grads);
 	}
 
 private:
@@ -168,17 +176,17 @@ public:
 	input_matrix() {}
 
 	template<class Data>
-	const auto &operator()(const Data &data) const {
+	const auto &operator()(const Data &data) {
 		return detail::at_spec<Index,const Data>(data);
 	}
 
-	template<class Data,class F>
-	auto operator()(const Data &data, F &&f) const {
-		return std::forward<F>(f)(detail::at_spec<Index,const Data>()(data));
+	template<class Data,class Fn>
+	auto operator()(const Data &data, Fn &&f) {
+		return std::forward<Fn>(f)(data, detail::at_spec<Index,const Data>()(data));
 	}
 
-	template<class Derived,class Data>
-	void bprop(const Eigen::MatrixBase<Derived> &in, const Data &gradients) const {}
+	template<class Derived,class Data,class Grads>
+	void bprop(const Eigen::MatrixBase<Derived> &in, const Data &data, const Grads &gradients) const {}
 };
 
 template<class Index,class Spec>
@@ -197,18 +205,18 @@ public:
 	weight_matrix() {}
 
 	template<class Data>
-	const auto &operator()(const Data &data) const {
+	const auto &operator()(const Data &data) {
 		return detail::at_spec<Index,const Data>(data);
 	}
 
-	template<class Data,class F>
-	auto operator()(const Data &data, F &&f) const {
-		return std::forward<F>(f)(detail::at_spec<Index,const Data>()(data));
+	template<class Data,class Fn>
+	auto operator()(const Data &data, Fn &&f) {
+		return std::forward<Fn>(f)(data, detail::at_spec<Index,const Data>()(data));
 	}
 
-	template<class Derived,class Data>
-	void bprop(const Eigen::MatrixBase<Derived> &in, const Data &gradients) const {
-		detail::at_spec<Index,const Data>(gradients) += in;
+	template<class Derived,class Data,class Grads>
+	void bprop(const Eigen::MatrixBase<Derived> &in, const Data &data, const Grads &gradients) const {
+		detail::at_spec<Index,const Grads>()(gradients) += in;
 	}
 };
 
@@ -225,20 +233,20 @@ public:
 	rowwise_add(expression_ptr<derived_ptr<A>> &&a, expression_ptr<derived_ptr<B>> &&b) :
 		a_(std::move(a).transfer_cast()), b_(std::move(b).transfer_cast()) {}
 
-	template<class Data,class F>
-	auto operator()(const Data &data, F &&f) const {
+	template<class Data,class Fn>
+	auto operator()(const Data &data, Fn &&f) {
 		return detail::binary_cont(a_, b_, data,
-			[f = std::forward<F>(f)] (auto &&a, auto &&b) {
-				return f(std::forward<decltype(a)>(a).rowwise() +
-					std::forward<decltype(b)>(b));
+			[f = std::forward<Fn>(f)] (auto &&data, auto &&a, auto &&b) {
+				return f(std::forward<decltype(data)>(data),
+					std::forward<decltype(a)>(a).rowwise() + std::forward<decltype(b)>(b));
 		});
 	}
 
-	template<class Derived,class Data>
-	void bprop(const Eigen::MatrixBase<Derived> &in, const Data &gradients) const {
+	template<class Derived,class Data,class Grads>
+	void bprop(const Eigen::MatrixBase<Derived> &in, const Data &data, const Grads &gradients) const {
 		const auto &eval_in = in.eval();
-		a_.bprop(eval_in, gradients);
-		b_.bprop(eval_in.colwise().sum(), gradients);
+		a_.bprop(eval_in, data, gradients);
+		b_.bprop(eval_in.colwise().sum(), data, gradients);
 	}
 
 private:
@@ -260,18 +268,19 @@ public:
 			a_(std::move(a).transfer_cast()), b_(std::move(b).transfer_cast()) {
 	}
 
-	template<class Data,class F>
-	auto operator()(const Data &data, F &&f) const {
-		detail::binary_cont(a_, b_, data, [f = std::forward<F>(f)] (auto &&a, auto &&b) {
-			return std::forward<decltype(f)>(f)(std::forward<decltype(a)>(a) * std::forward<decltype(b)>(b));
+	template<class Data,class Fn>
+	auto operator()(const Data &data, Fn &&f) {
+		detail::binary_cont(a_, b_, data, [f = std::forward<Fn>(f)] (auto &&data, auto &&a, auto &&b) {
+			return std::forward<decltype(f)>(f)(std::forward<decltype(data)>(data),
+				std::forward<decltype(a)>(a) * std::forward<decltype(b)>(b));
 		});
 	}
 
-	template<class Derived,class Data>
-	void bprop(const Eigen::MatrixBase<Derived> &in, const Data &gradients) const {
+	template<class Derived,class Data,class Grads>
+	void bprop(const Eigen::MatrixBase<Derived> &in, const Data &data, const Grads &gradients) const {
 		const auto &eval_in = in.eval();
-		b_([this, &eval_in, &gradients] (auto &&b) { this->a_.bprop(eval_in * b.transpose(), gradients); });
-		a_([this, &eval_in, &gradients] (auto &&a) { this->b_.bprop(a.transpose() * eval_in, gradients); });
+		b_(data, [this, &eval_in, &gradients] (auto &&data, auto &&b) { this->a_.bprop(eval_in * b.transpose(), data, gradients); });
+		a_(data, [this, &eval_in, &gradients] (auto &&data, auto &&a) { this->b_.bprop(a.transpose() * eval_in, data, gradients); });
 	}
 
 private:
@@ -292,15 +301,15 @@ public:
 	logistic_sigmoid(expression_ptr<derived_ptr<A>> &&a) :
 			a_(std::move(a).transfer_cast()) {}
 
-	template<class Data,class F>
-	auto operator()(const Data &data, F &&f) const {
-		a_(data, [this] (auto &&a) { this->result_ = F(1) / (F(1) + (-a).array().exp()); });
-		return std::forward<F>(f)(result_.matrix());
+	template<class Data,class Fn>
+	auto operator()(const Data &data, Fn &&f) {
+		a_(data, [this] (auto &&data, auto &&a) { this->result_ = F(1) / (F(1) + (-a).array().exp()); });
+		return std::forward<Fn>(f)(data, result_.matrix());
 	}
 
-	template<class Derived,class Data>
-	void bprop(const Eigen::MatrixBase<Derived> &in, const Data &gradients) const {
-		a_.bprop((in.array() * result_ * (1 - result_)).matrix(), gradients);
+	template<class Derived,class Data,class Grads>
+	void bprop(const Eigen::MatrixBase<Derived> &in, const Data &data, const Grads &gradients) const {
+		a_.bprop((in.array() * result_ * (1 - result_)).matrix(), data, gradients);
 	}
 
 private:
@@ -326,18 +335,18 @@ public:
 	softmax_crossentropy(expression_ptr<derived_ptr<A>> &&a) :
 			a_(std::move(a).transfer_cast()) {}
 
-	template<class Data,class F>
-	auto operator()(const Data &data, F &&f) const {
+	template<class Data,class Fn>
+	auto operator()(const Data &data, Fn &&f) {
 		array_type eval_a;
-		a_(data, [&eval_a] (auto &&a) { eval_a = a.array(); });
+		a_(data, [&eval_a] (auto &&data, auto &&a) { eval_a = a.array(); });
 		array_type t = (eval_a.colwise() - eval_a.rowwise().maxCoeff()).exp();
 		result_ = t.colwise() / t.rowwise().sum();
-		return std::forward<F>(f)(result_.matrix());
+		return std::forward<Fn>(f)(data, result_.matrix());
 	}
 
-	template<class Derived,class Data>
-	void bprop_loss(const Eigen::MatrixBase<Derived> &targets, const Data &gradients) const {
-		a_.bprop(result_.matrix() - targets, gradients);
+	template<class Derived,class Data,class Grads>
+	void bprop_loss(const Eigen::MatrixBase<Derived> &targets, const Data &data, const Grads &gradients) const {
+		a_.bprop(result_.matrix() - targets, data, gradients);
 	}
 
 private:
