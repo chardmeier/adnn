@@ -1,3 +1,7 @@
+#undef _GNU_SOURCE
+#define _GNU_SOURCE
+#include <fenv.h>
+
 #include <iostream>
 
 #include <boost/fusion/include/make_vector.hpp>
@@ -43,11 +47,11 @@ void check(const Net &net, const matrix &input, const weights &ww, const weights
 	Float ow = ww.template at<N>()(i,j);
 
 	disturb.template at<N>()(i,j) = ow + EPS;
-	matrix out1 = net(fusion::make_vector(input, disturb.sequence()));
+	matrix out1 = net.fprop(fusion::make_vector(input, disturb.sequence()));
 	Float j1 = -targets.cwiseProduct(out1.array().log().matrix()).sum();
 
 	disturb.template at<N>()(i,j) = ow - EPS;
-	matrix out2 = net(fusion::make_vector(input, disturb.sequence()));
+	matrix out2 = net.fprop(fusion::make_vector(input, disturb.sequence()));
 	Float j2 = -targets.cwiseProduct(out2.array().log().matrix()).sum();
 
 	Float g = (j1 - j2) / (2 * EPS);
@@ -56,29 +60,34 @@ void check(const Net &net, const matrix &input, const weights &ww, const weights
 }
 
 int main() {
+	feenableexcept(FE_INVALID | FE_DIVBYZERO);
+
 	matrix input, targets;
 
 	get_data(input, targets);
 
 	spec_type spec(nnet::mat_size<Float>(7,10), nnet::vec_size<Float>(10), nnet::mat_size<Float>(10,3), nnet::vec_size<Float>(3));
+	//spec_type spec(nnet::mat_size<Float>(7,10));
 	auto inputspec = fusion::make_vector(nnet::mat_size<Float>(input.rows(), input.cols()), spec);
 
-	typedef mpl::vector_c<int,0> I;
-	typedef mpl::vector_c<int,1,0> W1;
-	typedef mpl::vector_c<int,1,1> B1;
-	typedef mpl::vector_c<int,1,2> W2;
-	typedef mpl::vector_c<int,1,3> B2;
+	typedef mpl::vector1_c<int,0> I;
+	typedef mpl::vector2_c<int,1,0> W1;
+	typedef mpl::vector2_c<int,1,1> B1;
+	typedef mpl::vector2_c<int,1,2> W2;
+	typedef mpl::vector2_c<int,1,3> B2;
 
 	using namespace netops;
-	auto net = eval(softmax_crossentropy(logistic_sigmoid(input_matrix<I>(inputspec) * weight_matrix<W1>(inputspec) + weight_matrix<B1>(inputspec)) *
-						weight_matrix<W2>(inputspec) + weight_matrix<B2>(inputspec)));
+	auto net = softmax_crossentropy(logistic_sigmoid(input_matrix<I>(inputspec) * weight_matrix<W1>(inputspec) + weight_matrix<B1>(inputspec)) *
+						weight_matrix<W2>(inputspec) + weight_matrix<B2>(inputspec));
+	//auto net = eval(logistic_sigmoid(input_matrix<I>(inputspec) * weight_matrix<W1>(inputspec)));
 
 	weights ww(spec);
 	ww.init_normal(.1);
 	weights grad(spec);
 
-	matrix out = net(fusion::make_vector(input, ww.sequence()));
-	net.bprop_loss(targets, fusion::make_vector(mpl::vector_c<int,0>(), grad.sequence()));
+	auto inputdata = fusion::make_vector(input, ww.sequence());
+	matrix out = net.fprop(inputdata);
+	net.bprop_loss(targets, inputdata, fusion::make_vector(mpl::vector_c<int,0>(), grad.sequence()));
 
 	check<0>(net, input, ww, grad, targets, 3, 3);
 	check<0>(net, input, ww, grad, targets, 2, 4);
