@@ -83,7 +83,7 @@ int main() {
 
 	weights ww(spec);
 	ww.init_normal(.1);
-	weights grad(spec);
+	weights grad(spec, 0);
 
 	auto inputdata = fusion::make_vector(input, ww.sequence());
 	matrix out = net.fprop(inputdata);
