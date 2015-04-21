@@ -77,9 +77,10 @@ int main() {
 	typedef mpl::vector2_c<int,1,3> B2;
 
 	using namespace netops;
-	auto net = softmax_crossentropy(logistic_sigmoid(input_matrix<I>(inputspec) * weight_matrix<W1>(inputspec) + weight_matrix<B1>(inputspec)) *
-						weight_matrix<W2>(inputspec) + weight_matrix<B2>(inputspec));
-	//auto net = eval(logistic_sigmoid(input_matrix<I>(inputspec) * weight_matrix<W1>(inputspec)));
+	//auto net = softmax_crossentropy(logistic_sigmoid(input_matrix<I>(inputspec) * weight_matrix<W1>(inputspec) + weight_matrix<B1>(inputspec)) *
+	//					weight_matrix<W2>(inputspec) + weight_matrix<B2>(inputspec));
+	
+	auto net = softmax_crossentropy(linear_layer<W2,B2>(inputspec, logistic_sigmoid(linear_layer<W1,B1>(inputspec, input_matrix<I>(inputspec)))));
 
 	weights ww(spec);
 	ww.init_normal(.1);
