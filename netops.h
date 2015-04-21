@@ -368,6 +368,12 @@ softmax_crossentropy(expression_ptr<derived_ptr<A>> &&a) {
 	return std::make_unique<expr::softmax_crossentropy<A>>(std::move(a).transfer_cast());
 }
 
+template<class WIdx,class BIdx,class A,class Spec>
+auto
+linear_layer(const Spec &spec, expression_ptr<derived_ptr<A>> &&a) {
+	return std::move(a).transfer_cast() * weight_matrix<WIdx>(spec) + weight_matrix<BIdx>(spec);
+}
+
 } // namespace netops
 
 #endif
