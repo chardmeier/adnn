@@ -1,12 +1,14 @@
 #ifndef NNET_NETOPS_H
 #define NNET_NETOPS_H
 
+#include <array>
 #include <memory>
 #include <type_traits>
 
 #include <boost/fusion/include/at.hpp>
 #include <boost/fusion/include/fold.hpp>
 #include <boost/fusion/include/mpl.hpp>
+#include <boost/fusion/include/value_at.hpp>
 
 #include <Eigen/Core>
 
@@ -190,6 +192,62 @@ public:
 	}
 };
 
+template<class... Args>
+class concat {
+private:
+	typedef typename boost::fusion::vector<derived_ptr<Args>...> expr_vector;
+	typedef typename boost::fusion::result_of::value_at_c<expr_vector,0>::type first_arg_type;
+
+public:
+	typedef typename first_arg_type::F F;
+	enum {
+		RowsAtCompileTime = first_arg_type::RowsAtCompileTime,
+		ColsAtCompileTime = Eigen::Dynamic,
+		StorageOrder = first_arg_type::StorageOrder
+	};
+
+private:
+	typedef Eigen::Matrix<F,RowsAtCompileTime,ColsAtCompileTime,StorageOrder> matrix_type;
+
+public:
+	concat(expression_ptr<derived_ptr<Args>> &&... args) :
+		exprs_(std::move(args).transfer_cast()...) {}
+
+	template<class Data,class Fn>
+	auto operator()(const Data &data, Fn &&f) {
+		namespace fusion = boost::fusion;
+		auto colit = cols_.begin();
+		fusion::fold(exprs_, std::size_t(0), [&data, &colit] (std::size_t s, auto &e) {
+			std::size_t c = e(data, [] (auto &&a) { return a.cols(); });
+			*(colit++) = c;
+			return s + c;
+		});
+		concat_.resize(fusion::front(exprs_).rows(), cols_.back());
+		fusion::fold(exprs_, std::size_t(0), [this, &data] (std::size_t s, auto &e) {
+			return s + e(data, [this, s] (auto &&a) {
+				this->concat_.middleCols(s, a.cols()) = std::forward<decltype(a)>(a);
+				return a.cols();
+			});
+		});
+		return std::forward<Fn>(f)(data, concat_);
+	}
+
+	template<class Derived,class Data,class Grads>
+	void bprop(const Eigen::MatrixBase<Derived> &in, const Data &data, const Grads &gradients) const {
+		const auto &eval_in = in.eval();
+		auto colit = cols_.begin();
+		boost::fusion::fold(exprs_, std::size_t(0), [&eval_in, &data, &gradients, &colit] (std::size_t s, auto &e) {
+			e.bprop(eval_in.middleCols(s, *colit), data, gradients);
+			return s + *(colit++);
+		});
+	}
+
+private:
+	expr_vector exprs_;
+	std::array<std::size_t,sizeof...(Args)> cols_;
+	matrix_type concat_;
+};
+
 template<class A,class B>
 class rowwise_add {
 public:
@@ -342,6 +400,12 @@ template<class Index,class Spec>
 derived_ptr<expr::weight_matrix<Index,Spec>>
 weight_matrix(const Spec &spec) {
 	return std::make_unique<expr::weight_matrix<Index,Spec>>();
+}
+
+template<class... Args>
+derived_ptr<expr::concat<Args...>>
+concat(expression_ptr<derived_ptr<Args>> &&... args) {
+	return std::make_unique<expr::concat<Args...>>(std::move(args).transfer_cast()...);
 }
 
 template<class A,class B>
