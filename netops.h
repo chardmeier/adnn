@@ -2,6 +2,8 @@
 #define NNET_NETOPS_H
 
 #include <array>
+#include <cmath>
+#include <limits>
 #include <memory>
 #include <type_traits>
 
@@ -11,6 +13,7 @@
 #include <boost/fusion/include/value_at.hpp>
 
 #include <Eigen/Core>
+#include <Eigen/Sparse>
 
 namespace netops {
 
@@ -380,6 +383,79 @@ public:
 private:
 	derived_ptr<A> a_;
 	array_type result_;
+};
+
+template<class MapIdx,class A>
+class nn6_combiner {
+public:
+	typedef typename A::F F;
+	enum {
+		RowsAtCompileTime = A::RowsAtCompileTime,
+		ColsAtCompileTime = A::ColsAtCompileTime,
+		StorageOrder = A::StorageOrder
+	};
+
+private:
+	typedef typename Eigen::SparseMatrix<F,Eigen::RowMajor> map_matrix; // RowMajor is important here
+
+public:
+	nn6_internal_softmax(expression_ptr<derived_ptr<A>> &&w, expression_ptr<derived_ptr<B>> &&ant) :
+			w_(std::move(w).transfer_cast()), ant_(std::move(ant).transfer_cast()) {}
+
+	template<class Data,class Fn>
+	auto operator()(const Data &data, Fn &&f) {
+		const auto mapping = detail::at_spec<MapIdx>()(data); // a vector with the number of rows for each example
+
+		std_vector<F> maxcoeff;
+		w_(data, [this, &mapping, &maxcoeff] (auto &&a) {
+			this->mapmat_.resize(mapping.rows(), a.rows());
+			this->mapmat_.reserve(mapping);
+			maxcoeff.resize(mapping.rows());
+			maxcoeff.setConstant(-std::numeric_limits<F>::infinity());
+			for(int row = 0, col = 0, n = 0; col < a.rows(); ++i, ++n) {
+				if(n > mapping(row))
+					n = 0, ++row;
+				if(a(col) > maxcoeff(row))
+					maxcoeff(row) = a(col);
+				this->mapmat_.insert(row, col, a(col));
+			}
+		});
+
+		std_vector<F> sum(mapmat_.rows());
+		sum.setZero();
+		for(int i = 0; i < mapmat_.outerSize(); ++i)
+			for(map_matrix::InnerIterator it(mapmat_, i); it; ++it) {
+				using std::exp;
+				F val = exp(it.value() - maxcoeff(it.row()));
+				sum(it.row()) += val;
+				it.value() = val;
+			}
+
+		for(int i = 0; i < mapmat_.outerSize(); ++i)
+			for(map_matrix::InnerIterator it(mapmat_, i); it; ++it)
+				it.value() /= sum(it.row());
+
+		return ant_(data, [f = std::forward<Fn>(f)] (auto &&b) {
+			return std::forward<Fn>(f)(mapmat_ * std::forward<decltype(b)>(b));
+		});
+	}
+
+	template<class Derived,class Data,class Grads>
+	void bprop(const Eigen::MatrixBase<Derived> &in, const Data &data, const Grads &gradients) const {
+		const auto &eval_in = in.eval();
+		ant_.bprop(mapmat_.transpose() * eval_in, data, gradients);
+		map_matrix onemap(mapmat_);
+		for(int i = 0; i < onemap.outerSize(); ++i)
+			for(map_matrix::InnerIterator it(onemap, i); it; ++it)
+				it.value() = 1;
+		w_.bprop((onemap.transpose() * eval_in).rowwise().sum(), data, gradients);
+		// fix softmax derivative
+	}
+
+private:
+	derived_ptr<A> w_;
+	derived_ptr<B> ant_;
+	map_matrix mapmat_;
 };
 
 } // namespace expr
