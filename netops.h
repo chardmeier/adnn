@@ -85,33 +85,6 @@ auto binary_cont(const derived_ptr<A> &a_, const derived_ptr<B> &b_, const Data 
 	});
 }
 
-/*
-template<class Index,class Sequence>
-struct at_spec;
-
-template<class Data>
-struct at_spec<boost::mpl::void_,Data> {
-	typedef Data result_type;
-
-	result_type operator()(Data &data) const {
-		return data;
-	}
-};
-
-template<class Index,class Sequence>
-struct at_spec {
-	typedef typename boost::mpl::front<Index>::type head;
-	typedef typename boost::mpl::pop_front<Index>::type tail;
-
-	typedef typename boost::fusion::result_of::at<Sequence,head>::type next_type;
-	typedef typename at_spec<tail,next_type>::result_type result_type;
-
-	result_type operator()(Sequence &seq) const {
-		return at_spec<tail,next_type>()(boost::fusion::at<head>(seq));
-	}
-};
-*/
-
 struct spec_hop {
 	template<class State,class Index>
 	auto operator()(State &&s, Index e) const {
