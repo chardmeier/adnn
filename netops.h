@@ -7,9 +7,6 @@
 #include <boost/fusion/include/at.hpp>
 #include <boost/fusion/include/fold.hpp>
 #include <boost/fusion/include/mpl.hpp>
-#include <boost/mpl/front.hpp>
-#include <boost/mpl/pop_front.hpp>
-#include <boost/mpl/vector.hpp>
 
 #include <Eigen/Core>
 
