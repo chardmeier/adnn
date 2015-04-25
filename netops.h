@@ -385,8 +385,9 @@ private:
 	array_type result_;
 };
 
-template<class MapIdx,class A,class B>
-class nn6_combiner {
+/*
+template<class MapIdx,class A>
+class nn6_softmax {
 public:
 	typedef typename A::F F;
 	enum {
@@ -399,15 +400,17 @@ private:
 	typedef typename Eigen::SparseMatrix<F,Eigen::RowMajor> map_matrix; // RowMajor is important here
 
 public:
-	nn6_combiner(expression_ptr<derived_ptr<A>> &&w, expression_ptr<derived_ptr<B>> &&ant) :
-			w_(std::move(w).transfer_cast()), ant_(std::move(ant).transfer_cast()) {}
+	nn6_softmax(expression_ptr<derived_ptr<A>> &&a) :
+			a_(std::move(a).transfer_cast()) {}
 
 	template<class Data,class Fn>
 	auto operator()(const Data &data, Fn &&f) {
-		const auto mapping = detail::at_spec<MapIdx,Data>()(data); // a vector with the number of rows for each example
+		const auto &weights = detail::at_spec<WeightIdx,Data>()(data);
+		const auto &mapping = detail::at_spec<MapIdx,Data>()(data); // a vector with the number of rows for each example
 
 		Eigen::Matrix<F,Eigen::Dynamic,1,StorageOrder> maxcoeff;
-		w_(data, [this, &mapping, &maxcoeff] (auto &&a) {
+		a_(data, [this, &weights, &mapping, &maxcoeff] (auto &&a) {
+			const auto &smin = (a * weights).eval();
 			this->mapmat_.resize(mapping.rows(), a.rows());
 			this->mapmat_.reserve(mapping);
 			maxcoeff.resize(mapping.rows());
@@ -435,8 +438,48 @@ public:
 			for(typename map_matrix::InnerIterator it(mapmat_, i); it; ++it)
 				it.value() /= sum(it.row());
 
-		return ant_(data, [this, f = std::forward<Fn>(f)] (auto &&b) {
-			return std::forward<Fn>(f)(this->mapmat_ * std::forward<decltype(b)>(b));
+		return std::forward<Fn>(f)(mapmat_);
+	}
+
+	template<class Derived,class Data,class Grads>
+	void bprop(const Eigen::MatrixBase<Derived> &in, const Data &data, const Grads &gradients) const {
+		const auto &eval_in = in.rowwise().sum().eval();
+
+		Grads subgrads(gradients);
+		subgrads.array().setZero();
+		a_.bprop(Eigen::Matrix<F,Eigen::Dynamic,1,StorageOrder>::Ones(eval_in.rows()), data, subgrads);
+		
+		// fix softmax derivative
+	}
+
+private:
+	derived_ptr<A> a_;
+	map_matrix mapmat_;
+};
+*/
+
+template<class MapIdx,class A,class B>
+class nn6_combiner {
+public:
+	typedef typename A::F F;
+	enum {
+		RowsAtCompileTime = A::RowsAtCompileTime,
+		ColsAtCompileTime = A::ColsAtCompileTime,
+		StorageOrder = A::StorageOrder
+	};
+
+private:
+	typedef typename Eigen::SparseMatrix<F,Eigen::RowMajor> map_matrix; // RowMajor is important here
+
+public:
+	nn6_combiner(expression_ptr<derived_ptr<A>> &&ant, expression_ptr<derived_ptr<B>> &&map) :
+			ant_(std::move(ant).transfer_cast()), map_(std::move(map).transfer_cast()) {}
+
+	template<class Data,class Fn>
+	auto operator()(const Data &data, Fn &&f) {
+		map_(data, [this] (auto &&map) { this->matmap_ = map; });
+		return ant_(data, [this, f = std::forward<Fn>(f)] (auto &&ant) {
+			return std::forward<Fn>(f)(this->matmap_ * std::forward<decltype(ant)>(ant));
 		});
 	}
 
@@ -448,13 +491,12 @@ public:
 		for(int i = 0; i < onemap.outerSize(); ++i)
 			for(typename map_matrix::InnerIterator it(onemap, i); it; ++it)
 				it.value() = 1;
-		w_.bprop((onemap.transpose() * eval_in).rowwise().sum(), data, gradients);
-		// fix softmax derivative
+		ant_.bprop(onemap.transpose() * eval_in, data, gradients);
 	}
 
 private:
-	derived_ptr<A> w_;
-	derived_ptr<B> ant_;
+	derived_ptr<A> ant_;
+	derived_ptr<B> map_;
 	map_matrix mapmat_;
 };
 
@@ -506,6 +548,12 @@ template<class A>
 derived_ptr<expr::softmax_crossentropy<A>>
 softmax_crossentropy(expression_ptr<derived_ptr<A>> &&a) {
 	return std::make_unique<expr::softmax_crossentropy<A>>(std::move(a).transfer_cast());
+}
+
+template<class MapIdx,class Ant,class Map>
+derived_ptr<expr::nn6_combiner<MapIdx,Ant,Map>>
+nn6_combiner(expression_ptr<derived_ptr<Ant>> &&ant, expression_ptr<derived_ptr<Map>> &&map) {
+	return std::make_unique<expr::nn6_combiner<MapIdx,Ant,Map>>(std::move(ant).transfer_cast(), std::move(map).transfer_cast());
 }
 
 template<class WIdx,class BIdx,class A,class Spec>
