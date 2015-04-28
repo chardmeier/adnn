@@ -500,6 +500,67 @@ private:
 	map_matrix mapmat_;
 };
 
+template<class MapIdx,class A>
+class max_pooling {
+public:
+	typedef typename A::F F;
+	enum {
+		RowsAtCompileTime = Eigen::Dynamic,
+		ColsAtCompileTime = A::ColsAtCompileTime,
+		StorageOrder = A::StorageOrder
+	};
+
+private:
+	typedef typename Eigen::Matrix<F,Eigen::Dynamic,ColsAtCompileTime,StorageOrder> mask_matrix;
+
+public:
+	max_pooling(expression_ptr<derived_ptr<A>> &&a) : a_(std::move(a).transfer_cast()) {}
+
+	template<class Data,class Fn>
+	auto operator()(const Data &data, Fn &&f) {
+		const auto &map = detail::at_spec<MapIdx>()(data);
+		return a_(data, [this, &map, f = std::forward<Fn>(f)] (auto &&a) {
+			this->maxmask_.resize(a.rows(), a.cols());
+			this->maxmask_.setZero();
+			Eigen::Matrix<F,RowsAtCompileTime,ColsAtCompileTime,StorageOrder> out;
+			out.resize(a.rows(), a.cols());
+			out.setConstant(-std::numeric_limits<F>::infinity());
+			for(int i = 0, k = 0; i < a.rows(); i++) {
+				Eigen::Matrix<int,1,ColsAtCompileTime,StorageOrder> idx;
+				idx.resize(a.cols());
+				idx.setZero();
+				for(int j = 0; j < map(i); j++, k++) {
+					for(int l = 0; l < a.cols(); l++) {
+						if(a(k,l) > out(i,l)) {
+							out(i,l) = a(k,l);
+							idx(l) = k;
+						}
+					}
+				}
+				for(int j = 0; j < idx.cols(); j++)
+					this->maxmask_(i,idx(j)) = 1;
+			}
+			return std::forward<Fn>(f)(out);
+		});
+	}
+
+	template<class Derived,class Data,class Grads>
+	void bprop(const Eigen::MatrixBase<Derived> &in, const Data &data, const Grads &gradients) const {
+		const auto &eval_in = in.eval();
+		Eigen::Matrix<F,A::RowsAtCompileTime,ColsAtCompileTime,StorageOrder> outgrads;
+		outgrads.resizeLike(maxmask_);
+		const auto &map = detail::at_spec<MapIdx>()(data);
+		for(int i = 0, k = 0; i < eval_in.rows(); i++)
+			for(int j = 0; j < map(i); j++, k++)
+				outgrads.row(k) = eval_in.row(i);
+		a_.bprop(maxmask_.cwiseProduct(outgrads), data, gradients);
+	}
+
+private:
+	derived_ptr<A> a_;
+	mask_matrix maxmask_;
+};
+
 } // namespace expr
 
 template<class A>
@@ -554,6 +615,12 @@ template<class MapIdx,class Ant,class Map>
 derived_ptr<expr::nn6_combiner<MapIdx,Ant,Map>>
 nn6_combiner(expression_ptr<derived_ptr<Ant>> &&ant, expression_ptr<derived_ptr<Map>> &&map) {
 	return std::make_unique<expr::nn6_combiner<MapIdx,Ant,Map>>(std::move(ant).transfer_cast(), std::move(map).transfer_cast());
+}
+
+template<class MapIdx,class A>
+derived_ptr<expr::max_pooling<MapIdx,A>>
+max_pooling(expression_ptr<derived_ptr<A>> &&a) {
+	return std::make_unique<expr::max_pooling<MapIdx,A>>(std::move(a).transfer_cast());
 }
 
 template<class WIdx,class BIdx,class A,class Spec>
