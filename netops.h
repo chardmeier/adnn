@@ -518,7 +518,7 @@ public:
 
 	template<class Data,class Fn>
 	auto operator()(const Data &data, Fn &&f) {
-		const auto &map = detail::at_spec<MapIdx>()(data);
+		const auto &map = detail::at_spec<MapIdx,Data>()(data);
 		return a_(data, [this, &map, f = std::forward<Fn>(f)] (auto &&a) {
 			this->maxmask_.resize(a.rows(), a.cols());
 			this->maxmask_.setZero();
@@ -549,7 +549,7 @@ public:
 		const auto &eval_in = in.eval();
 		Eigen::Matrix<F,A::RowsAtCompileTime,ColsAtCompileTime,StorageOrder> outgrads;
 		outgrads.resizeLike(maxmask_);
-		const auto &map = detail::at_spec<MapIdx>()(data);
+		const auto &map = detail::at_spec<MapIdx,Data>()(data);
 		for(int i = 0, k = 0; i < eval_in.rows(); i++)
 			for(int j = 0; j < map(i); j++, k++)
 				outgrads.row(k) = eval_in.row(i);
