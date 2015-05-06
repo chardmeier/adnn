@@ -20,6 +20,7 @@
 #include <boost/fusion/include/make_cons.hpp>
 #include <boost/fusion/include/make_vector.hpp>
 #include <boost/fusion/include/size.hpp>
+#include <boost/fusion/include/transform.hpp>
 
 #include <Eigen/Core>
 
@@ -224,13 +225,17 @@ struct is_eigen_map<Eigen::Map<P,O,S> > : std::true_type {};
 
 template<class FF,class Spec,class Array>
 class weights {
+
 private:
 	template<typename,typename,typename> friend class weights;
 
 	Spec spec_;
 	Array data_;
 
+public:
 	typedef decltype(detail::create_weight_maps<FF>().process_sequence(spec_, data_.data())) map_type;
+
+private:
 	map_type mat_;
 
 public:
@@ -362,21 +367,6 @@ auto create_weight_maps<FF>::process_element(const spec<Type> &e, FF *data) cons
 	return std::make_pair(map_type(data, e.rows(), e.cols()), newpos);
 }
 
-/*
-template<class FF>
-auto create_weight_maps<FF>::process_element(const mat_size &e, FF *data) const {
-	typedef Eigen::Map<std_matrix<FF> > map_type;
-	FF *newpos = data + e.rows * e.cols;
-	return std::make_pair(map_type(data, e.rows, e.cols), newpos);
-}
-
-template<class FF>
-auto create_weight_maps<FF>::process_element(const vec_size &e, FF *data) const {
-	typedef Eigen::Map<std_matrix<FF,1> > map_type;
-	FF *newpos = data + e.cols;
-	return std::make_pair(map_type(data, e.cols), newpos);
-}
-*/
 
 template<class FF>
 template<class Sequence>
@@ -385,26 +375,6 @@ auto create_weight_maps<FF>::process_element(const Sequence &s, FF *data, std::e
 	auto l = process_sequence(begin(s), end(s), data);
 	return std::make_pair(as_vector(l.first), l.second);
 }
-
-/*
-template<class FF,class Spec>
-template<class List>
-auto create_weight_maps<FF,Spec>::operator()(const std::pair<FF*,List> &s, const mat_size &e) const {
-	typedef Eigen::Map<Eigen::Matrix<FF,Eigen::Dynamic,Eigen::Dynamic> > map_type;
-	FF *newpos = s.first + e.rows * e.cols;
-	return std::make_pair(newpos, push_back(s.second, map_type(s.first, e.rows, e.cols)));
-}
-
-template<class FF,class Spec>
-template<class List,class List2>
-auto create_weight_maps<FF,Spec>::operator()(const std::pair<FF*,List> &s, const List2 &e) const {
-	typedef Eigen::Map<std_array<FF> > array_map_type;
-	const auto &sublist = accumulate(e, std::make_pair(s.first, boost::fusion::list<>()), create_weight_maps<FF,Spec>());
-	array_map_type submap(s.first, sublist.first - s.first, 1);
-	return std::make_pair(sublist.first, boost::fusion::make_vector(weights<FF,List2,array_map_type>(
-		push_back(s.second, sublist.second), submap)));
-}
-*/
 
 struct dump_matrix {
 	std::ostream &os_;
@@ -417,7 +387,38 @@ struct dump_matrix {
 	}
 };
 
+struct data_to_spec {
+	template<class Data>
+	auto operator()(const Data &d, std::enable_if_t<boost::fusion::traits::is_sequence<Data>::type::value>* = nullptr) const;
+	template<class Derived>
+	auto operator()(const Eigen::EigenBase<Derived> &m, std::enable_if_t<Derived::RowsAtCompileTime == 1>* = nullptr) const;
+	template<class Derived>
+	auto operator()(const Eigen::EigenBase<Derived> &m, std::enable_if_t<Derived::RowsAtCompileTime != 1>* = nullptr) const;
+};
+
+template<class Data>
+auto data_to_spec::operator()(const Data &d, std::enable_if_t<boost::fusion::traits::is_sequence<Data>::type::value>*) const {
+	return boost::fusion::transform(d, data_to_spec());
+}
+
+template<class Derived>
+auto data_to_spec::operator()(const Eigen::EigenBase<Derived> &m, std::enable_if_t<Derived::RowsAtCompileTime == 1>*) const {
+	constexpr int storage_order = Derived::IsRowMajor ? Eigen::RowMajor : Eigen::ColMajor;
+	return vec_size<typename Derived::Scalar,storage_order>(m.cols());
+}
+
+template<class Derived>
+auto data_to_spec::operator()(const Eigen::EigenBase<Derived> &m, std::enable_if_t<Derived::RowsAtCompileTime != 1>*) const {
+	constexpr int storage_order = Derived::IsRowMajor ? Eigen::RowMajor : Eigen::ColMajor;
+	return mat_size<typename Derived::Scalar,storage_order>(m.rows(), m.cols());
+}
+
 } // namespace detail
+
+template<class Data>
+auto data_to_spec(const Data &d) {
+	return detail::data_to_spec()(d);
+}
 
 template<class FF,class Spec,class Array>
 std::ostream &operator<<(std::ostream &os, const weights<FF,Spec,Array> &ww) {
