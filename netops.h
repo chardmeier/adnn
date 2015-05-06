@@ -232,13 +232,13 @@ public:
 		namespace fusion = boost::fusion;
 		auto colit = cols_.begin();
 		std::size_t nrows;
-		fusion::fold(exprs_, std::size_t(0), [&data, &nrows, &colit] (std::size_t s, auto &e) {
+		std::size_t ncols = fusion::fold(exprs_, std::size_t(0), [&data, &nrows, &colit] (std::size_t s, auto &e) {
 			std::size_t c;
 			e(data, [&c, &nrows] (auto &&d, auto &&a) { nrows = a.rows(); c = a.cols(); });
 			*(colit++) = c;
 			return s + c;
 		});
-		concat_.resize(nrows, cols_.back());
+		concat_.resize(nrows, ncols);
 		fusion::fold(exprs_, std::size_t(0), [this, &data] (std::size_t s, auto &e) {
 			std::size_t c;
 			e(data, [this, s, &c] (auto &&d, auto &&a) {
@@ -501,8 +501,10 @@ public:
 			for(int j = 0; j < antmap(i); j++, c++)
 				mapmat_.insert(i,c) = map(c);
 		return ant_(data, [this, f = std::forward<Fn>(f)] (auto &&d, auto &&ant) {
-			return std::forward<decltype(f)>(f)(std::forward<decltype(d)>(d),
-				this->mapmat_ * std::forward<decltype(ant)>(ant));
+			//return std::forward<decltype(f)>(f)(std::forward<decltype(d)>(d),
+				//this->mapmat_ * std::forward<decltype(ant)>(ant));
+			this->antin_ = ant;
+			return std::forward<decltype(f)>(f)(std::forward<decltype(d)>(d), this->mapmat_ * this->antin_);
 		});
 	}
 
@@ -510,16 +512,17 @@ public:
 	void bprop(const Eigen::MatrixBase<Derived> &in, const Data &data, const Grads &gradients) const {
 		const auto &eval_in = in.eval();
 		ant_.bprop(mapmat_.transpose() * eval_in, data, gradients);
-		map_matrix onemap(mapmat_);
-		for(int i = 0; i < onemap.outerSize(); ++i)
-			for(typename map_matrix::InnerIterator it(onemap, i); it; ++it)
+		map_matrix backmat(mapmat_);
+		for(int i = 0; i < backmat.outerSize(); ++i)
+			for(typename map_matrix::InnerIterator it(backmat, i); it; ++it)
 				it.valueRef() = 1;
-		ant_.bprop(onemap.transpose() * eval_in, data, gradients);
+		map_.bprop((backmat.transpose() * eval_in).cwiseProduct(antin_).rowwise().sum(), data, gradients);
 	}
 
 private:
 	derived_ptr<A> ant_;
 	derived_ptr<B> map_;
+	Eigen::Matrix<F,RowsAtCompileTime,ColsAtCompileTime,StorageOrder> antin_;
 	map_matrix mapmat_;
 };
 
