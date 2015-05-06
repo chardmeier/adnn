@@ -11,6 +11,8 @@
 #include <boost/fusion/include/fold.hpp>
 #include <boost/fusion/include/mpl.hpp>
 #include <boost/fusion/include/value_at.hpp>
+#include <boost/mpl/int.hpp>
+#include <boost/mpl/push_back.hpp>
 
 #include <Eigen/Core>
 #include <Eigen/Sparse>
@@ -73,19 +75,7 @@ private:
 	std::unique_ptr<A> ptr_;
 };
 
-namespace expr {
-
 namespace detail {
-
-template<class Data,class A,class B,class Fn>
-auto binary_cont(const derived_ptr<A> &a_, const derived_ptr<B> &b_, const Data &data, const Fn &&f) {
-	return a_(data, [&b_, f = std::forward<const Fn>(f)] (auto &&data, auto &&a) {
-		return b_(data, [a = std::forward<decltype(a)>(a), f = std::forward<const Fn>(f)] (auto &&data, auto &&b) {
-			return std::forward<const Fn>(f)(std::forward<decltype(data)>(data),
-				std::forward<decltype(a)>(a), std::forward<decltype(b)>(b));
-		});
-	});
-}
 
 struct spec_hop {
 	template<class State,class Index>
@@ -101,6 +91,27 @@ struct at_spec {
 		return boost::fusion::fold(Index(), seq, spec_hop());
 	}
 };
+
+} // namespace detail
+
+template<class Index,class Sequence>
+auto at_spec(Sequence &seq) {
+	return detail::at_spec<Index,Sequence>()(seq);
+}
+
+namespace expr {
+
+namespace detail {
+
+template<class Data,class A,class B,class Fn>
+auto binary_cont(const derived_ptr<A> &a_, const derived_ptr<B> &b_, const Data &data, const Fn &&f) {
+	return a_(data, [&b_, f = std::forward<const Fn>(f)] (auto &&data, auto &&a) {
+		return b_(data, [a = std::forward<decltype(a)>(a), f = std::forward<const Fn>(f)] (auto &&data, auto &&b) {
+			return std::forward<const Fn>(f)(std::forward<decltype(data)>(data),
+				std::forward<decltype(a)>(a), std::forward<decltype(b)>(b));
+		});
+	});
+}
 
 } // namespace detail
 
@@ -138,7 +149,7 @@ private:
 template<class Index,class Spec>
 class input_matrix {
 private:
-	typedef typename detail::at_spec<Index,Spec>::type spec_type;
+	typedef typename ::netops::detail::at_spec<Index,Spec>::type spec_type;
 
 public:
 	typedef typename spec_type::float_type F;
@@ -152,12 +163,12 @@ public:
 
 	template<class Data>
 	const auto &operator()(const Data &data) {
-		return detail::at_spec<Index,const Data>(data);
+		return at_spec<Index,const Data>(data);
 	}
 
 	template<class Data,class Fn>
 	auto operator()(const Data &data, Fn &&f) {
-		return std::forward<Fn>(f)(data, detail::at_spec<Index,const Data>()(data));
+		return std::forward<Fn>(f)(data, at_spec<Index,const Data>(data));
 	}
 
 	template<class Derived,class Data,class Grads>
@@ -167,7 +178,7 @@ public:
 template<class Index,class Spec>
 class weight_matrix {
 private:
-	typedef typename detail::at_spec<Index,Spec>::type spec_type;
+	typedef typename ::netops::detail::at_spec<Index,Spec>::type spec_type;
 
 public:
 	typedef typename spec_type::float_type F;
@@ -181,17 +192,17 @@ public:
 
 	template<class Data>
 	const auto &operator()(const Data &data) {
-		return detail::at_spec<Index,const Data>(data);
+		return at_spec<Index,const Data>(data);
 	}
 
 	template<class Data,class Fn>
 	auto operator()(const Data &data, Fn &&f) {
-		return std::forward<Fn>(f)(data, detail::at_spec<Index,const Data>()(data));
+		return std::forward<Fn>(f)(data, at_spec<Index,const Data>(data));
 	}
 
 	template<class Derived,class Data,class Grads>
 	void bprop(const Eigen::MatrixBase<Derived> &in, const Data &data, const Grads &gradients) const {
-		detail::at_spec<Index,const Grads>()(gradients) += in;
+		at_spec<Index,const Grads>(gradients) += in;
 	}
 };
 
@@ -220,17 +231,21 @@ public:
 	auto operator()(const Data &data, Fn &&f) {
 		namespace fusion = boost::fusion;
 		auto colit = cols_.begin();
-		fusion::fold(exprs_, std::size_t(0), [&data, &colit] (std::size_t s, auto &e) {
-			std::size_t c = e(data, [] (auto &&a) { return a.cols(); });
+		std::size_t nrows;
+		fusion::fold(exprs_, std::size_t(0), [&data, &nrows, &colit] (std::size_t s, auto &e) {
+			std::size_t c;
+			e(data, [&c, &nrows] (auto &&d, auto &&a) { nrows = a.rows(); c = a.cols(); });
 			*(colit++) = c;
 			return s + c;
 		});
-		concat_.resize(fusion::front(exprs_).rows(), cols_.back());
+		concat_.resize(nrows, cols_.back());
 		fusion::fold(exprs_, std::size_t(0), [this, &data] (std::size_t s, auto &e) {
-			return s + e(data, [this, s] (auto &&a) {
+			std::size_t c;
+			e(data, [this, s, &c] (auto &&d, auto &&a) {
 				this->concat_.middleCols(s, a.cols()) = std::forward<decltype(a)>(a);
-				return a.cols();
+				c = a.cols();
 			});
+			return s + c;
 		});
 		return std::forward<Fn>(f)(data, concat_);
 	}
@@ -477,9 +492,17 @@ public:
 
 	template<class Data,class Fn>
 	auto operator()(const Data &data, Fn &&f) {
-		map_(data, [this] (auto &&map) { this->matmap_ = map; });
-		return ant_(data, [this, f = std::forward<Fn>(f)] (auto &&ant) {
-			return std::forward<Fn>(f)(this->matmap_ * std::forward<decltype(ant)>(ant));
+		Eigen::Matrix<F,Eigen::Dynamic,1> map;
+		map_(data, [&map] (auto &&d, auto &&m) { map = m; });
+		const auto &antmap = at_spec<MapIdx>(data);
+		mapmat_.resize(antmap.rows(), map.rows());
+		mapmat_.reserve(antmap);
+		for(int i = 0, c = 0; i < antmap.rows(); i++)
+			for(int j = 0; j < antmap(i); j++, c++)
+				mapmat_.insert(i,c) = map(c);
+		return ant_(data, [this, f = std::forward<Fn>(f)] (auto &&d, auto &&ant) {
+			return std::forward<decltype(f)>(f)(std::forward<decltype(d)>(d),
+				this->mapmat_ * std::forward<decltype(ant)>(ant));
 		});
 	}
 
@@ -490,7 +513,7 @@ public:
 		map_matrix onemap(mapmat_);
 		for(int i = 0; i < onemap.outerSize(); ++i)
 			for(typename map_matrix::InnerIterator it(onemap, i); it; ++it)
-				it.value() = 1;
+				it.valueRef() = 1;
 		ant_.bprop(onemap.transpose() * eval_in, data, gradients);
 	}
 
@@ -518,7 +541,7 @@ public:
 
 	template<class Data,class Fn>
 	auto operator()(const Data &data, Fn &&f) {
-		const auto &map = detail::at_spec<MapIdx,Data>()(data);
+		const auto &map = at_spec<MapIdx,Data>(data);
 		return a_(data, [this, &map, f = std::forward<Fn>(f)] (auto &&a) {
 			this->maxmask_.resize(a.rows(), a.cols());
 			this->maxmask_.setZero();
@@ -549,7 +572,7 @@ public:
 		const auto &eval_in = in.eval();
 		Eigen::Matrix<F,A::RowsAtCompileTime,ColsAtCompileTime,StorageOrder> outgrads;
 		outgrads.resizeLike(maxmask_);
-		const auto &map = detail::at_spec<MapIdx,Data>()(data);
+		const auto &map = at_spec<MapIdx,Data>(data);
 		for(int i = 0, k = 0; i < eval_in.rows(); i++)
 			for(int j = 0; j < map(i); j++, k++)
 				outgrads.row(k) = eval_in.row(i);
@@ -623,9 +646,19 @@ max_pooling(expression_ptr<derived_ptr<A>> &&a) {
 	return std::make_unique<expr::max_pooling<MapIdx,A>>(std::move(a).transfer_cast());
 }
 
+/*
 template<class WIdx,class BIdx,class A,class Spec>
 auto
 linear_layer(const Spec &spec, expression_ptr<derived_ptr<A>> &&a) {
+	return std::move(a).transfer_cast() * weight_matrix<WIdx>(spec) + weight_matrix<BIdx>(spec);
+}
+*/
+
+template<class Idx,class A,class Spec>
+auto
+linear_layer(const Spec &spec, expression_ptr<derived_ptr<A>> &&a) {
+	typedef typename boost::mpl::push_back<Idx,boost::mpl::int_<0>>::type WIdx;
+	typedef typename boost::mpl::push_back<Idx,boost::mpl::int_<1>>::type BIdx;
 	return std::move(a).transfer_cast() * weight_matrix<WIdx>(spec) + weight_matrix<BIdx>(spec);
 }
 
