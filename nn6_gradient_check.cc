@@ -28,7 +28,7 @@ typedef double Float;
 typedef unsigned long voc_id;
 typedef Eigen::Matrix<Float,Eigen::Dynamic,Eigen::Dynamic,Eigen::RowMajor> matrix;
 
-enum { CE, CELA, ELLE, ELLES, IL, ILS, ON, CA, NCLASSES };
+enum { CE, CELA, ELLE, ELLES, IL, ILS, ON, CA, OTHER, NCLASSES };
 
 template<class Idx,int WB,class Net,class Input,class Weights,class Targets>
 void check(const Net &net, const Input &input, const Weights &ww, const Weights &grad, const Targets &targets, int i, int j) {
@@ -85,7 +85,7 @@ voc_id voc_lookup(const std::string &word, vocmap &voc, bool extend) {
 }
 
 auto load_nn6(const std::string &file, vocmap &srcvocmap, vocmap &antvocmap) {
-	bool make_vocabulary = srcvocmap.map.empty();
+	bool make_vocabulary = srcvocmap.map.size() <= 1;
 
 	std::ifstream is(file);
 	if(!is.good())
@@ -97,15 +97,16 @@ auto load_nn6(const std::string &file, vocmap &srcvocmap, vocmap &antvocmap) {
 
 	std::vector<std::string> nn6_lines;
 	for(std::string line; getline(is, line);) {
-		if(line.compare(0, std::string::npos, "ANAPHORA", 8) == 0)
+		if(line.compare(0, 8, "ANAPHORA") == 0)
 			nexmpl++;
-		else if(line.compare(0, std::string::npos, "ANTECEDENT", 10) == 0)
+		else if(line.compare(0, 10, "ANTECEDENT") == 0)
 			nant++;
-		else if(line.compare(0, std::string::npos, "-1", 2) == 0) {
+		else if(line.compare(0, 2, "-1") == 0) {
 			std::istringstream ss(line);
 			std::size_t idx;
 			char colon;
 			Float val;
+			ss >> idx; // get rid of -1 in the beginning
 			while(ss >> idx >> colon >> val)
 				if(idx > nlink)
 					nlink = idx;
@@ -151,7 +152,7 @@ auto load_nn6(const std::string &file, vocmap &srcvocmap, vocmap &antvocmap) {
 		getline(ss, tag, ' ');
 		if(tag == "ANAPHORA") {
 			if(ex < nexmpl)
-				antmap(ex) = ant;
+				antmap(ex) = ant + 1;
 
 			ex++;
 			std::string word;
@@ -163,12 +164,17 @@ auto load_nn6(const std::string &file, vocmap &srcvocmap, vocmap &antvocmap) {
 			ant = std::numeric_limits<std::size_t>::max();
 		} else if(tag == "TARGET") {
 			std::string word;
+			bool found = false;
 			while(getline(ss, word, ' ')) {
 				boost::to_lower(word);
 				classmap_type::const_iterator it = classmap.find(word);
-				if(it != classmap.end())
+				if(it != classmap.end()) {
 					targets(ex, it->second)++;
+					found = true;
+				}
 			}
+			if(!found)
+				targets(ex, OTHER) = 1;
 		} else if(tag == "NADA")
 			ss >> nada(ex);
 		else if(tag == "ANTECEDENT") {
@@ -187,6 +193,8 @@ auto load_nn6(const std::string &file, vocmap &srcvocmap, vocmap &antvocmap) {
 				T(ant, fidx - 1) = fval;
 		}
 	}
+
+	targets.array().colwise() /= targets.array().rowwise().sum();
 
 	Eigen::SparseMatrix<Float,Eigen::RowMajor> A(nant, antvocmap.map.size());
 	A.setFromTriplets(ant_triplets.begin(), ant_triplets.end());
@@ -228,9 +236,11 @@ int main() {
 
 	vocmap srcvocmap;
 	vocmap antvocmap;
-	auto data = load_nn6("/work/users/chm/ncv9.nn6", srcvocmap, antvocmap);
+	//auto data = load_nn6("/work/users/chm/ncv9.nn6", srcvocmap, antvocmap);
+	auto data = load_nn6("small.nn6", srcvocmap, antvocmap);
 	const auto &input = data.first;
 	const auto &targets = data.second;
+	std::cerr << "Data loaded." << std::endl;
 
 	typedef mpl::vector3_c<int,0,0,0> I_A;
 	typedef mpl::vector3_c<int,0,0,1> I_T;
@@ -244,21 +254,6 @@ int main() {
 	typedef mpl::vector3_c<int,0,1,5> I_R2;
 	typedef mpl::vector3_c<int,0,1,6> I_R3;
 
-/*
-	auto ispec = fusion::make_vector(
-			fusion::make_vector(
-				nnet::mat_size<Float>(nants, size_ant),
-				nnet::mat_size<Float>(nants, size_U),
-				nnet::mat_size<Float>(nexmpl, 1)),
-			fusion::make_vector(
-				nnet::mat_size<Float>(nexmpl, size_src),
-				nnet::mat_size<Float>(nexmpl, size_src),
-				nnet::mat_size<Float>(nexmpl, size_src),
-				nnet::mat_size<Float>(nexmpl, size_src),
-				nnet::mat_size<Float>(nexmpl, size_src),
-				nnet::mat_size<Float>(nexmpl, size_src),
-				nnet::mat_size<Float>(nexmpl, size_src)));
-*/
 	auto ispec = nnet::data_to_spec(input);
 	int size_T = netops::at_spec<typename mpl::pop_front<I_T>::type>(ispec).cols();
 	int size_ant = netops::at_spec<typename mpl::pop_front<I_A>::type>(ispec).cols();
@@ -292,12 +287,12 @@ int main() {
 	auto net = softmax_crossentropy(linear_layer<W_hidout>(spec,
 			logistic_sigmoid(linear_layer<W_embhid>(spec,
 				logistic_sigmoid(concat(
-					//linear_layer<W_srcembed>(spec, input_matrix<I_L3>(spec)),
-					//linear_layer<W_srcembed>(spec, input_matrix<I_L2>(spec)),
-					//linear_layer<W_srcembed>(spec, input_matrix<I_L1>(spec)),
-					//linear_layer<W_srcembed>(spec, input_matrix<I_P>(spec)),
-					//linear_layer<W_srcembed>(spec, input_matrix<I_R1>(spec)),
-					//linear_layer<W_srcembed>(spec, input_matrix<I_R2>(spec)),
+					linear_layer<W_srcembed>(spec, input_matrix<I_L3>(spec)),
+					linear_layer<W_srcembed>(spec, input_matrix<I_L2>(spec)),
+					linear_layer<W_srcembed>(spec, input_matrix<I_L1>(spec)),
+					linear_layer<W_srcembed>(spec, input_matrix<I_P>(spec)),
+					linear_layer<W_srcembed>(spec, input_matrix<I_R1>(spec)),
+					linear_layer<W_srcembed>(spec, input_matrix<I_R2>(spec)),
 					linear_layer<W_srcembed>(spec, input_matrix<I_R3>(spec)),
 					nn6_combiner<I_antmap>(
 						linear_layer<W_antembed>(spec, input_matrix<I_A>(spec)),
@@ -305,38 +300,41 @@ int main() {
 							logistic_sigmoid(linear_layer<W_U>(spec,
 								input_matrix<I_T>(spec))))))))))));
 
+	std::cerr << "Net created." << std::endl;
+
 	weights ww(wspec);
 	ww.init_normal(.1);
 	weights grad(wspec, 0);
 
 	auto inputdata = fusion::make_vector(input, ww.sequence());
 	matrix out = net.fprop(inputdata);
+	std::cerr << "Forward pass completed." << std::endl;
 	net.bprop_loss(targets, inputdata, fusion::make_vector(mpl::vector_c<int,0>(), grad.sequence()));
+	std::cerr << "Backward pass completed." << std::endl;
 
-	check<W_U,0>(net, input, ww, grad, targets, 3, 3);
-	check<W_U,0>(net, input, ww, grad, targets, 2, 4);
-	check<W_U,1>(net, input, ww, grad, targets, 0, 3);
-	check<W_U,1>(net, input, ww, grad, targets, 0, 4);
-	check<W_V,0>(net, input, ww, grad, targets, 2, 3);
-	check<W_V,0>(net, input, ww, grad, targets, 5, 6);
-	check<W_V,1>(net, input, ww, grad, targets, 0, 3);
-	check<W_V,1>(net, input, ww, grad, targets, 0, 6);
-	check<W_antembed,0>(net, input, ww, grad, targets, 3, 0);
-	check<W_antembed,0>(net, input, ww, grad, targets, 2, 2);
-	check<W_antembed,1>(net, input, ww, grad, targets, 0, 0);
-	check<W_antembed,1>(net, input, ww, grad, targets, 0, 2);
-	check<W_srcembed,0>(net, input, ww, grad, targets, 5, 1);
-	check<W_srcembed,0>(net, input, ww, grad, targets, 7, 2);
-	check<W_srcembed,1>(net, input, ww, grad, targets, 0, 1);
-	check<W_srcembed,1>(net, input, ww, grad, targets, 0, 2);
-	check<W_embhid,0>(net, input, ww, grad, targets, 2, 1);
-	check<W_embhid,0>(net, input, ww, grad, targets, 6, 2);
-	check<W_embhid,1>(net, input, ww, grad, targets, 0, 1);
-	check<W_embhid,1>(net, input, ww, grad, targets, 0, 2);
-	check<W_hidout,0>(net, input, ww, grad, targets, 1, 1);
-	check<W_hidout,0>(net, input, ww, grad, targets, 8, 2);
-	check<W_hidout,1>(net, input, ww, grad, targets, 0, 1);
 	check<W_hidout,1>(net, input, ww, grad, targets, 0, 2);
+	check<W_hidout,1>(net, input, ww, grad, targets, 0, 1);
+	check<W_hidout,0>(net, input, ww, grad, targets, 8, 2);
+	check<W_hidout,0>(net, input, ww, grad, targets, 1, 1);
+	check<W_embhid,1>(net, input, ww, grad, targets, 0, 2);
+	check<W_embhid,1>(net, input, ww, grad, targets, 0, 1);
+	check<W_embhid,0>(net, input, ww, grad, targets, 6, 2);
+	check<W_embhid,0>(net, input, ww, grad, targets, 2, 1);
+	check<W_srcembed,1>(net, input, ww, grad, targets, 0, 2);
+	check<W_srcembed,1>(net, input, ww, grad, targets, 0, 1);
+	check<W_srcembed,0>(net, input, ww, grad, targets, 7, 2);
+	check<W_srcembed,0>(net, input, ww, grad, targets, 5, 1);
+	check<W_antembed,1>(net, input, ww, grad, targets, 0, 2);
+	check<W_antembed,1>(net, input, ww, grad, targets, 0, 0);
+	check<W_antembed,0>(net, input, ww, grad, targets, 2, 2);
+	check<W_antembed,0>(net, input, ww, grad, targets, 3, 0);
+	check<W_V,1>(net, input, ww, grad, targets, 0, 0);
+	check<W_V,0>(net, input, ww, grad, targets, 5, 0);
+	check<W_V,0>(net, input, ww, grad, targets, 2, 0);
+	check<W_U,1>(net, input, ww, grad, targets, 0, 4);
+	check<W_U,1>(net, input, ww, grad, targets, 0, 3);
+	check<W_U,0>(net, input, ww, grad, targets, 2, 4);
+	check<W_U,0>(net, input, ww, grad, targets, 3, 3);
 
 	return 0;
 }
