@@ -4,6 +4,7 @@
 #include "nnet.h"
 #include "net_wrapper.h"
 
+#include <chrono>
 #include <ctime>
 
 namespace nnet {
@@ -46,7 +47,7 @@ public:
 
 template<class Net>
 nnopt<Net>::nnopt(const Net &net) :
-		nsteps_(50), batchsize_(100), init_weights_(net.spec()),
+		nsteps_(1), batchsize_(100), init_weights_(net.spec()),
 		initial_learning_rate_(.001), learning_schedule_(20),
 		momentum_(.9), l2reg_(.001) {
 	init_weights_.init_normal(.01);
@@ -58,6 +59,7 @@ nnopt_results<Net> nnopt<Net>::train(const Net &net, const Loss &loss, const Tra
 	const float_type ONE = 1;
 	const float_type ZERO = 0;
 	const float_type TINY = 1e-15;
+	typedef typename Net::template basic_output_type<float_type> output_type;
 
 	nnopt_results<Net> results(net);
 
@@ -72,16 +74,20 @@ nnopt_results<Net> nnopt<Net>::train(const Net &net, const Loss &loss, const Tra
 
 	results.best_valerr = std::numeric_limits<float_type>::infinity();
 	
-	std::size_t progress = (trainset.nitems() / batchsize_) / 80;
+	float_type nbatches = std::ceil(float_type(trainset.nitems()) / batchsize_);
+	std::size_t progress = nbatches / 80;
 
 	bool first_iteration = true;
 	for(int i = 0; i < nsteps_; i++) {
 		float_type err = 0;
+		float_type err2 = 0;
 		float_type alpha = initial_learning_rate_ / (ONE + float_type(i) / learning_schedule_);
 		std::size_t batchcnt = 0;
 		for(auto batchit = trainset.batch_begin(batchsize_); batchit != trainset.batch_end(); ++batchit, ++batchcnt) {
 			weight_type grad(net.spec(), ZERO);
-			err += wrapped_net(ww, batchit->inputs(), batchit->targets(), grad);
+			std::chrono::system_clock::time_point t1 = std::chrono::system_clock::now();
+			err += wrapped_net(ww, batchit->inputs(), batchit->targets(), grad) / nbatches;
+			std::chrono::system_clock::time_point t2 = std::chrono::system_clock::now();
 			grad.array() += l2reg_ * ww.array();
 			//std::cerr << "grad.w1:\n" << grad.w1() << std::endl;
 			rms.array() = float_type(.9) * rms.array() + float_type(.1) * grad.array() * grad.array();
@@ -109,12 +115,24 @@ nnopt_results<Net> nnopt<Net>::train(const Net &net, const Loss &loss, const Tra
 
 			prev_grad = grad;
 
-			if(batchcnt % progress == 0 && batchcnt > 0)
+			std::chrono::system_clock::time_point t3 = std::chrono::system_clock::now();
+			output_type batchout = net(ww, batchit->inputs());
+			std::chrono::system_clock::time_point t4 = std::chrono::system_clock::now();
+			err2 += evaluate_loss(loss, batchout, batchit->targets()) / nbatches;
+			std::chrono::system_clock::time_point t5 = std::chrono::system_clock::now();
+			std::cerr <<
+				std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() << "us - " <<
+				std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2).count() << "us - " <<
+				std::chrono::duration_cast<std::chrono::microseconds>(t4 - t3).count() << "us - " <<
+				std::chrono::duration_cast<std::chrono::microseconds>(t5 - t4).count() << "us - " <<
+				err << " == " << err2 << std::endl;
+			if(batchcnt % progress == 0 && batchcnt > 0) {
 				std::cerr << '.';
+			}
 		}
 		results.trainerr.push_back(err);
 
-		const auto &valout = net(ww, valset.inputs());
+		output_type valout = net(ww, valset.inputs());
 		//std::cerr << "ww.w1\n" << ww.w1() << "\nvalout:\n" << valout.matrix() << std::endl;
 		results.valerr.push_back(evaluate_loss(loss, valout, valset.targets())); 
 		if(results.valerr.back() < results.best_valerr) {
