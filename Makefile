@@ -25,11 +25,14 @@ EIGEN = $(HOME)/eigen-3.2.4
 
 NNET_HEADERS = nnet.h net_wrapper.h nnopt.h mlp.h logbilinear_lm.h
 
+nn6: nn6.cc netops.h $(NNET_HEADERS)
+	$(CXX) $(CXX_FLAGS) $(OPT) $(MKL) -o nn6 -g -I$(BOOST) -I$(EIGEN) nn6.cc -lm
+
 nn6_gradient_check: nn6_gradient_check.cc netops.h $(NNET_HEADERS)
-	$(CXX) $(CXX_FLAGS) $(OPT) $(MKL) -o nn6_gradient_check -g $(OPT) -I$(BOOST) -I$(EIGEN) nn6_gradient_check.cc -lm
+	$(CXX) $(CXX_FLAGS) $(OPT) $(MKL) -o nn6_gradient_check -g -I$(BOOST) -I$(EIGEN) nn6_gradient_check.cc -lm
 
 gradient_check: gradient_check.cc netops.h $(NNET_HEADERS)
-	$(CXX) $(CXX_FLAGS) $(OPT) $(MKL) -o gradient_check -g $(OPT) -I$(BOOST) -I$(EIGEN) gradient_check.cc -lm
+	$(CXX) $(CXX_FLAGS) $(OPT) $(MKL) -o gradient_check -g -I$(BOOST) -I$(EIGEN) gradient_check.cc -lm
 
 netops:	netops.cc netops.h
 	$(CXX) $(CXX_FLAGS) $(OPT) $(MKL) -o netops -g $(OPT) -I$(BOOST) -I$(EIGEN) netops.cc -lm
