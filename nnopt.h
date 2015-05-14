@@ -71,7 +71,7 @@ nnopt_results<Net> nnopt<Net>::train(Net &net, const TrainingDataset &trainset, 
 	results.best_valerr = std::numeric_limits<float_type>::infinity();
 	
 	float_type nbatches = std::ceil(float_type(trainset.nitems()) / batchsize_);
-	std::size_t progress = nbatches / 80;
+	std::size_t progress = nbatches / 80 + 1;
 
 	bool first_iteration = true;
 	for(int i = 0; i < nsteps_; i++) {
