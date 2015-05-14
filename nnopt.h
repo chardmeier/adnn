@@ -2,7 +2,6 @@
 #define NNET_NNOPT_H
 
 #include "nnet.h"
-#include "net_wrapper.h"
 
 #include <chrono>
 #include <ctime>
@@ -12,7 +11,7 @@ namespace nnet {
 template<class Net>
 struct nnopt_results {
 	typedef typename Net::float_type float_type;
-	typedef typename Net::template weight_type<float_type> weight_type;
+	typedef typename Net::weight_type weight_type;
 
 	nnopt_results(const Net &net) :
 		best_weights(net.spec()) {}
@@ -27,7 +26,7 @@ template<class Net>
 class nnopt {
 public:
 	typedef typename Net::float_type float_type;
-	typedef typename Net::template weight_type<float_type> weight_type;
+	typedef typename Net::weight_type weight_type;
 
 private:
 	int nsteps_;
@@ -41,8 +40,8 @@ private:
 public:
 	nnopt(const Net &net);
 
-	template<class Loss,class TrainingDataset,class ValidationDataset>
-	nnopt_results<Net> train(const Net &net, const Loss &loss, const TrainingDataset &trainset, const ValidationDataset &valset) const;
+	template<class TrainingDataset,class ValidationDataset>
+	nnopt_results<Net> train(Net &net, const TrainingDataset &trainset, const ValidationDataset &valset) const;
 };
 
 template<class Net>
@@ -54,16 +53,13 @@ nnopt<Net>::nnopt(const Net &net) :
 }
 
 template<class Net>
-template<class Loss,class TrainingDataset,class ValidationDataset>
-nnopt_results<Net> nnopt<Net>::train(const Net &net, const Loss &loss, const TrainingDataset &trainset, const ValidationDataset &valset) const {
+template<class TrainingDataset,class ValidationDataset>
+nnopt_results<Net> nnopt<Net>::train(Net &net, const TrainingDataset &trainset, const ValidationDataset &valset) const {
 	const float_type ONE = 1;
 	const float_type ZERO = 0;
 	const float_type TINY = 1e-15;
-	typedef typename Net::template basic_output_type<float_type> output_type;
 
 	nnopt_results<Net> results(net);
-
-	net_wrapper<Net,Loss> wrapped_net(net, loss);
 
 	weight_type ww(init_weights_);
 
@@ -86,7 +82,9 @@ nnopt_results<Net> nnopt<Net>::train(const Net &net, const Loss &loss, const Tra
 		for(auto batchit = trainset.batch_begin(batchsize_); batchit != trainset.batch_end(); ++batchit, ++batchcnt) {
 			weight_type grad(net.spec(), ZERO);
 			std::chrono::system_clock::time_point t1 = std::chrono::system_clock::now();
-			err += wrapped_net(ww, batchit->inputs(), batchit->targets(), grad) / nbatches;
+			auto output = net(ww, batchit->input());
+			net.bprop(batchit->input(), batchit->targets(), ww, grad);
+			err += net.error(output, batchit->targets()) / nbatches;
 			std::chrono::system_clock::time_point t2 = std::chrono::system_clock::now();
 			grad.array() += l2reg_ * ww.array();
 			//std::cerr << "grad.w1:\n" << grad.w1() << std::endl;
@@ -116,9 +114,9 @@ nnopt_results<Net> nnopt<Net>::train(const Net &net, const Loss &loss, const Tra
 			prev_grad = grad;
 
 			std::chrono::system_clock::time_point t3 = std::chrono::system_clock::now();
-			output_type batchout = net(ww, batchit->inputs());
+			auto batchout = net(ww, batchit->input());
 			std::chrono::system_clock::time_point t4 = std::chrono::system_clock::now();
-			err2 += evaluate_loss(loss, batchout, batchit->targets()) / nbatches;
+			err2 += net.error(batchout, batchit->targets()) / nbatches;
 			std::chrono::system_clock::time_point t5 = std::chrono::system_clock::now();
 			std::cerr <<
 				std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() << "us - " <<
@@ -132,9 +130,9 @@ nnopt_results<Net> nnopt<Net>::train(const Net &net, const Loss &loss, const Tra
 		}
 		results.trainerr.push_back(err);
 
-		output_type valout = net(ww, valset.inputs());
+		auto valout = net(ww, valset.input());
 		//std::cerr << "ww.w1\n" << ww.w1() << "\nvalout:\n" << valout.matrix() << std::endl;
-		results.valerr.push_back(evaluate_loss(loss, valout, valset.targets())); 
+		results.valerr.push_back(net.error(valout, valset.targets()));
 		if(results.valerr.back() < results.best_valerr) {
 			results.best_valerr = results.valerr.back();
 			results.best_weights = ww;
