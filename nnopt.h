@@ -76,16 +76,16 @@ nnopt_results<Net> nnopt<Net>::train(Net &net, const TrainingDataset &trainset, 
 	bool first_iteration = true;
 	for(int i = 0; i < nsteps_; i++) {
 		float_type err = 0;
-		float_type err2 = 0;
 		float_type alpha = initial_learning_rate_ / (ONE + float_type(i) / learning_schedule_);
 		std::size_t batchcnt = 0;
 		for(auto batchit = trainset.batch_begin(batchsize_); batchit != trainset.batch_end(); ++batchit, ++batchcnt) {
 			weight_type grad(net.spec(), ZERO);
 			std::chrono::system_clock::time_point t1 = std::chrono::system_clock::now();
 			auto output = net(ww, batchit->input());
+			std::chrono::system_clock::time_point t2 = std::chrono::system_clock::now();
 			net.bprop(batchit->input(), batchit->targets(), ww, grad);
 			err += net.error(output, batchit->targets()) / nbatches;
-			std::chrono::system_clock::time_point t2 = std::chrono::system_clock::now();
+			std::chrono::system_clock::time_point t3 = std::chrono::system_clock::now();
 			grad.array() += l2reg_ * ww.array();
 			//std::cerr << "grad.w1:\n" << grad.w1() << std::endl;
 			rms.array() = float_type(.9) * rms.array() + float_type(.1) * grad.array() * grad.array();
@@ -113,20 +113,14 @@ nnopt_results<Net> nnopt<Net>::train(Net &net, const TrainingDataset &trainset, 
 
 			prev_grad = grad;
 
-			std::chrono::system_clock::time_point t3 = std::chrono::system_clock::now();
-			auto batchout = net(ww, batchit->input());
 			std::chrono::system_clock::time_point t4 = std::chrono::system_clock::now();
-			err2 += net.error(batchout, batchit->targets()) / nbatches;
-			std::chrono::system_clock::time_point t5 = std::chrono::system_clock::now();
 			std::cerr <<
 				std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() << "us - " <<
 				std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2).count() << "us - " <<
 				std::chrono::duration_cast<std::chrono::microseconds>(t4 - t3).count() << "us - " <<
-				std::chrono::duration_cast<std::chrono::microseconds>(t5 - t4).count() << "us - " <<
-				err << " == " << err2 << std::endl;
-			if(batchcnt % progress == 0 && batchcnt > 0) {
+				err << std::endl;
+			if(batchcnt % progress == 0 && batchcnt > 0)
 				std::cerr << '.';
-			}
 		}
 		results.trainerr.push_back(err);
 
