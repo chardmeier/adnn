@@ -353,9 +353,9 @@ auto create_weight_maps<FF>::process_sequence(const It &it1, const It &it2, FF *
 template<class FF>
 template<class It1,class It2>
 auto create_weight_maps<FF>::process_sequence(const It1 &it1, const It2 &it2, FF *data) const {
-	using namespace boost::fusion;
-	auto head = process_element(deref(it1), data);
-	auto tail = process_sequence(next(it1), it2, head.second);
+	namespace fusion = boost::fusion;
+	auto head = process_element(fusion::deref(it1), data);
+	auto tail = process_sequence(fusion::next(it1), it2, head.second);
 	return std::make_pair(make_cons(head.first, tail.first), tail.second);
 }
 
