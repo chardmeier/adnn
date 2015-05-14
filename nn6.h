@@ -443,14 +443,15 @@ auto nn6_dataset<InputSeq,Targets>::subset(std::size_t from, std::size_t to) con
 	const auto &T = netops::at_spec<idx::I_T>(input_);
 	const auto &antmap = netops::at_spec<idx::I_antmap>(input_);
 	const auto &srcctx = fusion::back(input_);
+	int nexmpl = std::min(to, nitems()) - from;
 	int from_ant = antmap.head(from).sum();
-	int n_ant = antmap.middleRows(from, to - from).sum();
+	int n_ant = antmap.middleRows(from, nexmpl).sum();
 	return make_nn6_dataset(
 		fusion::make_vector(
-			fusion::make_vector(A.middleRows(from_ant, n_ant), T.middleRows(from_ant, n_ant),
-				antmap.middleRows(from, to - from)),
-			fusion::transform(srcctx, [from, to] (auto &m) { return m.middleRows(from, to - from); })),
-		targets_.middleRows(from, to - from));
+			fusion::make_vector(A.middleRows(from_ant, n_ant).eval(), T.middleRows(from_ant, n_ant).eval(),
+				antmap.middleRows(from, nexmpl).eval()),
+			fusion::transform(srcctx, [from, nexmpl] (auto &m) { return m.middleRows(from, nexmpl).eval(); })),
+		targets_.middleRows(from, nexmpl).eval());
 }
 
 } // namespace nn6
