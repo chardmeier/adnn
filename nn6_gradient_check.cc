@@ -34,7 +34,7 @@ template<class Idx,int WB,class Net,class Input,class Weights,class Targets>
 void check(const Net &net, const Input &input, const Weights &ww, const Weights &grad, const Targets &targets, int i, int j) {
 	const Float EPS = 1e-4;
 
-	typedef typename mpl::push_back<typename mpl::pop_front<Idx>::type,mpl::int_<WB>>::type WIdx;
+	typedef typename mpl::push_back<Idx,mpl::int_<WB>>::type WIdx;
 
 	Weights disturb(ww);
 	Weights xgrad(ww);
@@ -42,11 +42,11 @@ void check(const Net &net, const Input &input, const Weights &ww, const Weights 
 	Float ow = netops::at_spec<WIdx>(ww.sequence())(i,j);
 
 	netops::at_spec<WIdx>(disturb.sequence())(i,j) = ow + EPS;
-	matrix out1 = net.fprop(fusion::make_vector(input, disturb.sequence()));
+	matrix out1 = net.fprop(input, disturb.sequence());
 	Float j1 = -targets.cwiseProduct(out1.array().log().matrix()).sum();
 
 	netops::at_spec<WIdx>(disturb.sequence())(i,j) = ow - EPS;
-	matrix out2 = net.fprop(fusion::make_vector(input, disturb.sequence()));
+	matrix out2 = net.fprop(input, disturb.sequence());
 	Float j2 = -targets.cwiseProduct(out2.array().log().matrix()).sum();
 
 	Float g = (j1 - j2) / (2 * EPS);
@@ -242,29 +242,29 @@ int main() {
 	const auto &targets = data.second;
 	std::cerr << "Data loaded." << std::endl;
 
-	typedef mpl::vector3_c<int,0,0,0> I_A;
-	typedef mpl::vector3_c<int,0,0,1> I_T;
-	typedef mpl::vector3_c<int,0,0,2> I_antmap;
+	typedef mpl::vector2_c<int,0,0> I_A;
+	typedef mpl::vector2_c<int,0,1> I_T;
+	typedef mpl::vector2_c<int,0,2> I_antmap;
 
-	typedef mpl::vector3_c<int,0,1,0> I_L3;
-	typedef mpl::vector3_c<int,0,1,1> I_L2;
-	typedef mpl::vector3_c<int,0,1,2> I_L1;
-	typedef mpl::vector3_c<int,0,1,3> I_P;
-	typedef mpl::vector3_c<int,0,1,4> I_R1;
-	typedef mpl::vector3_c<int,0,1,5> I_R2;
-	typedef mpl::vector3_c<int,0,1,6> I_R3;
+	typedef mpl::vector2_c<int,1,0> I_L3;
+	typedef mpl::vector2_c<int,1,1> I_L2;
+	typedef mpl::vector2_c<int,1,2> I_L1;
+	typedef mpl::vector2_c<int,1,3> I_P;
+	typedef mpl::vector2_c<int,1,4> I_R1;
+	typedef mpl::vector2_c<int,1,5> I_R2;
+	typedef mpl::vector2_c<int,1,6> I_R3;
 
 	auto ispec = nnet::data_to_spec(input);
-	int size_T = netops::at_spec<typename mpl::pop_front<I_T>::type>(ispec).cols();
-	int size_ant = netops::at_spec<typename mpl::pop_front<I_A>::type>(ispec).cols();
-	int size_src = netops::at_spec<typename mpl::pop_front<I_L1>::type>(ispec).cols();
+	int size_T = netops::at_spec<I_T>(ispec).cols();
+	int size_ant = netops::at_spec<I_A>(ispec).cols();
+	int size_src = netops::at_spec<I_L1>(ispec).cols();
 
-	typedef mpl::vector2_c<int,1,0> W_U;
-	typedef mpl::vector2_c<int,1,1> W_V;
-	typedef mpl::vector2_c<int,1,2> W_antembed;
-	typedef mpl::vector2_c<int,1,3> W_srcembed;
-	typedef mpl::vector2_c<int,1,4> W_embhid;
-	typedef mpl::vector2_c<int,1,5> W_hidout;
+	typedef mpl::vector1_c<int,0> W_U;
+	typedef mpl::vector1_c<int,1> W_V;
+	typedef mpl::vector1_c<int,2> W_antembed;
+	typedef mpl::vector1_c<int,3> W_srcembed;
+	typedef mpl::vector1_c<int,4> W_embhid;
+	typedef mpl::vector1_c<int,5> W_hidout;
 
 	const int size_U = 20;
 	const int size_antembed = 20;
@@ -281,24 +281,22 @@ int main() {
 
 	typedef nnet::weights<Float,decltype(wspec)> weights;
 
-	auto spec = fusion::make_vector(ispec, wspec);
-
 	using namespace netops;
-	auto net = softmax_crossentropy(linear_layer<W_hidout>(spec,
-			logistic_sigmoid(linear_layer<W_embhid>(spec,
+	auto net = softmax_crossentropy(linear_layer<W_hidout>(wspec,
+			logistic_sigmoid(linear_layer<W_embhid>(wspec,
 				logistic_sigmoid(concat(
-					linear_layer<W_srcembed>(spec, input_matrix<I_L3>(spec)),
-					linear_layer<W_srcembed>(spec, input_matrix<I_L2>(spec)),
-					linear_layer<W_srcembed>(spec, input_matrix<I_L1>(spec)),
-					linear_layer<W_srcembed>(spec, input_matrix<I_P>(spec)),
-					linear_layer<W_srcembed>(spec, input_matrix<I_R1>(spec)),
-					linear_layer<W_srcembed>(spec, input_matrix<I_R2>(spec)),
-					linear_layer<W_srcembed>(spec, input_matrix<I_R3>(spec)),
+					linear_layer<W_srcembed>(wspec, input_matrix<I_L3>(ispec)),
+					linear_layer<W_srcembed>(wspec, input_matrix<I_L2>(ispec)),
+					linear_layer<W_srcembed>(wspec, input_matrix<I_L1>(ispec)),
+					linear_layer<W_srcembed>(wspec, input_matrix<I_P>(ispec)),
+					linear_layer<W_srcembed>(wspec, input_matrix<I_R1>(ispec)),
+					linear_layer<W_srcembed>(wspec, input_matrix<I_R2>(ispec)),
+					linear_layer<W_srcembed>(wspec, input_matrix<I_R3>(ispec)),
 					nn6_combiner<I_antmap>(
-						linear_layer<W_antembed>(spec, input_matrix<I_A>(spec)),
-						logistic_sigmoid(linear_layer<W_V>(spec,
-							logistic_sigmoid(linear_layer<W_U>(spec,
-								input_matrix<I_T>(spec))))))))))));
+						linear_layer<W_antembed>(wspec, input_matrix<I_A>(ispec)),
+						logistic_sigmoid(linear_layer<W_V>(wspec,
+							logistic_sigmoid(linear_layer<W_U>(wspec,
+								input_matrix<I_T>(ispec))))))))))));
 
 	std::cerr << "Net created." << std::endl;
 
@@ -306,10 +304,9 @@ int main() {
 	ww.init_normal(.1);
 	weights grad(wspec, 0);
 
-	auto inputdata = fusion::make_vector(input, ww.sequence());
-	matrix out = net.fprop(inputdata);
+	matrix out = net.fprop(input, ww.sequence());
 	std::cerr << "Forward pass completed." << std::endl;
-	net.bprop_loss(targets, inputdata, fusion::make_vector(mpl::vector_c<int,0>(), grad.sequence()));
+	net.bprop_loss(targets, input, ww.sequence(), grad.sequence());
 	std::cerr << "Backward pass completed." << std::endl;
 
 	check<W_hidout,1>(net, input, ww, grad, targets, 0, 2);
