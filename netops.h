@@ -80,9 +80,10 @@ private:
 
 namespace detail {
 
+/*
 struct spec_hop {
 	template<class State,class Index>
-	auto operator()(State &&s, Index e) const {
+	auto &operator()(State &&s, Index e) const {
 		return boost::fusion::at<Index>(std::forward<State>(s));
 	}
 };
@@ -90,16 +91,40 @@ struct spec_hop {
 template<class Index,class Sequence>
 struct at_spec {
 	typedef typename boost::fusion::result_of::fold<Index,Sequence,spec_hop>::type type;
-	auto operator()(Sequence &seq) const {
+	auto &operator()(Sequence &seq) const {
 		return boost::fusion::fold(Index(), seq, spec_hop());
+	}
+};
+*/
+
+template<class IdxBegin,class IdxEnd>
+struct at_spec {
+	template<class Sequence>
+	auto operator()(Sequence &&seq) const {
+		typedef typename boost::mpl::deref<IdxBegin>::type idx;
+		typedef typename boost::mpl::next<IdxBegin>::type next;
+		//auto next_seq = boost::fusion::at<idx>(std::forward<Sequence>(seq));
+		//typedef typename std::remove_reference<typename boost::fusion::result_of::at<typename std::remove_reference<Sequence>::type,idx>::type>::type next_seq;
+		return at_spec<next,IdxEnd>()(boost::fusion::at<idx>(std::forward<Sequence>(seq)));
+	}
+};
+
+template<class IdxEnd>
+struct at_spec<IdxEnd,IdxEnd> {
+	template<class Element>
+	auto operator()(Element &&e) const {
+		return std::forward<Element>(e);
 	}
 };
 
 } // namespace detail
 
 template<class Index,class Sequence>
-auto at_spec(Sequence &seq) {
-	return detail::at_spec<Index,Sequence>()(seq);
+auto at_spec(Sequence &&seq) {
+	//return detail::at_spec<Index,Sequence>()(seq);
+	typedef typename boost::mpl::begin<Index>::type begin;
+	typedef typename boost::mpl::end<Index>::type end;
+	return detail::at_spec<begin,end>()(std::forward<Sequence>(seq));
 }
 
 namespace expr {
@@ -155,7 +180,8 @@ private:
 template<class Index,class Spec>
 class input_matrix {
 private:
-	typedef typename ::netops::detail::at_spec<Index,Spec>::type spec_type;
+	typedef decltype(at_spec<Index>(std::declval<Spec>())) spec_type;
+	//typedef typename ::netops::detail::at_spec<Index,Spec>::type spec_type;
 
 public:
 	typedef typename spec_type::float_type F;
@@ -184,7 +210,8 @@ public:
 template<class Index,class Spec>
 class weight_matrix {
 private:
-	typedef typename ::netops::detail::at_spec<Index,Spec>::type spec_type;
+	typedef decltype(at_spec<Index>(std::declval<Spec>())) spec_type;
+	//typedef typename ::netops::detail::at_spec<Index,Spec>::type spec_type;
 
 public:
 	typedef typename spec_type::float_type F;
