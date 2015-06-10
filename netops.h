@@ -133,8 +133,8 @@ namespace detail {
 
 template<class Input,class Weights,class A,class B,class Fn>
 auto binary_cont(const derived_ptr<A> &a_, const derived_ptr<B> &b_, const Input &input, const Weights &weights, const Fn &&f) {
-	return a_(input, weights, [&b_, f = std::forward<const Fn>(f)] (auto &&i, auto &&w, auto &&a) {
-		return b_(i, w, [a = std::forward<decltype(a)>(a), f = std::forward<const Fn>(f)] (auto &&i, auto &&w, auto &&b) {
+	return a_(input, weights, [&b_, &f] (auto &&i, auto &&w, auto &&a) {
+		return b_(i, w, [&a, &f] (auto &&i, auto &&w, auto &&b) {
 			return std::forward<const Fn>(f)(
 				std::forward<decltype(i)>(i), std::forward<decltype(w)>(w),
 				std::forward<decltype(a)>(a), std::forward<decltype(b)>(b));
@@ -315,7 +315,7 @@ public:
 	template<class Input,class Weights,class Fn>
 	auto operator()(const Input &input, const Weights &weights, Fn &&f) {
 		return detail::binary_cont(a_, b_, input, weights,
-			[f = std::forward<Fn>(f)] (auto &&i, auto &&w, auto &&a, auto &&b) {
+			[&f] (auto &&i, auto &&w, auto &&a, auto &&b) {
 				return f(std::forward<decltype(i)>(i), std::forward<decltype(w)>(w),
 					std::forward<decltype(a)>(a).rowwise() + std::forward<decltype(b)>(b));
 		});
@@ -349,7 +349,7 @@ public:
 
 	template<class Input,class Weights,class Fn>
 	auto operator()(const Input &input, const Weights &weights, Fn &&f) {
-		detail::binary_cont(a_, b_, input, weights, [f = std::forward<Fn>(f)] (auto &&i, auto &&w, auto &&a, auto &&b) {
+		detail::binary_cont(a_, b_, input, weights, [&f] (auto &&i, auto &&w, auto &&a, auto &&b) {
 			return std::forward<decltype(f)>(f)(
 				std::forward<decltype(i)>(i), std::forward<decltype(w)>(w),
 				std::forward<decltype(a)>(a) * std::forward<decltype(b)>(b));
@@ -538,7 +538,7 @@ public:
 		for(int i = 0, c = 0; i < antmap.rows(); i++)
 			for(int j = 0; j < antmap(i); j++, c++)
 				mapmat_.insert(i,c) = map(c);
-		return ant_(input, weights, [this, f = std::forward<Fn>(f)] (auto &&i, auto &&w, auto &&ant) {
+		return ant_(input, weights, [this, &f] (auto &&i, auto &&w, auto &&ant) {
 			//return std::forward<decltype(f)>(f)(std::forward<decltype(d)>(d),
 				//this->mapmat_ * std::forward<decltype(ant)>(ant));
 			this->antin_ = ant;
@@ -584,7 +584,7 @@ public:
 	template<class Input,class Weights,class Fn>
 	auto operator()(const Input &input, const Weights &weights, Fn &&f) {
 		const auto &map = at_spec<MapIdx>(input);
-		return a_(input, weights, [this, &map, f = std::forward<Fn>(f)] (auto &&i, auto &&w, auto &&a) {
+		return a_(input, weights, [this, &map, &f] (auto &&i, auto &&w, auto &&a) {
 			this->maxmask_.resize(a.rows(), a.cols());
 			this->maxmask_.setZero();
 			Eigen::Matrix<F,RowsAtCompileTime,ColsAtCompileTime,StorageOrder> out;
