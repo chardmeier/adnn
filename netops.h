@@ -64,13 +64,13 @@ public:
 
 	template<class Derived,class Input,class Weights,class Grads>
 	void bprop(const Eigen::MatrixBase<Derived> &in, const Input &input,
-			const Weights &weights, const Grads &gradients) const {
+			const Weights &weights, Grads &gradients) const {
 		ptr_->bprop(in, input, weights, gradients);
 	}
 
 	template<class Derived,class Input,class Weights,class Grads>
 	void bprop_loss(const Eigen::MatrixBase<Derived> &in, const Input &input,
-			const Weights &weights, const Grads &gradients) const {
+			const Weights &weights, Grads &gradients) const {
 		ptr_->bprop_loss(in, input, weights, gradients);
 	}
 
@@ -100,7 +100,7 @@ struct at_spec {
 template<class IdxBegin,class IdxEnd>
 struct at_spec {
 	template<class Sequence>
-	auto operator()(Sequence &&seq) const {
+	decltype(auto) operator()(Sequence &&seq) const {
 		typedef typename boost::mpl::deref<IdxBegin>::type idx;
 		typedef typename boost::mpl::next<IdxBegin>::type next;
 		//auto next_seq = boost::fusion::at<idx>(std::forward<Sequence>(seq));
@@ -112,7 +112,7 @@ struct at_spec {
 template<class IdxEnd>
 struct at_spec<IdxEnd,IdxEnd> {
 	template<class Element>
-	auto operator()(Element &&e) const {
+	decltype(auto) operator()(Element &&e) const {
 		return std::forward<Element>(e);
 	}
 };
@@ -120,7 +120,7 @@ struct at_spec<IdxEnd,IdxEnd> {
 } // namespace detail
 
 template<class Index,class Sequence>
-auto at_spec(Sequence &&seq) {
+decltype(auto) at_spec(Sequence &&seq) {
 	//return detail::at_spec<Index,Sequence>()(seq);
 	typedef typename boost::mpl::begin<Index>::type begin;
 	typedef typename boost::mpl::end<Index>::type end;
@@ -167,7 +167,7 @@ public:
 	}
 
 	template<class Derived,class Data,class Grads>
-	void bprop(const Eigen::MatrixBase<Derived> &in, const Data &data, const Grads &grads) const {
+	void bprop(const Eigen::MatrixBase<Derived> &in, const Data &data, Grads &grads) const {
 		expr_.bprop(in, data, grads);
 	}
 
@@ -180,7 +180,7 @@ private:
 template<class Index,class Spec>
 class input_matrix {
 private:
-	typedef decltype(at_spec<Index>(std::declval<Spec>())) spec_type;
+	typedef typename std::remove_reference<decltype(at_spec<Index>(std::declval<Spec>()))>::type spec_type;
 	//typedef typename ::netops::detail::at_spec<Index,Spec>::type spec_type;
 
 public:
@@ -204,13 +204,13 @@ public:
 	}
 
 	template<class Derived,class Input,class Weights,class Grads>
-	void bprop(const Eigen::MatrixBase<Derived> &in, const Input &input, const Weights &weights, const Grads &gradients) const {}
+	void bprop(const Eigen::MatrixBase<Derived> &in, const Input &input, const Weights &weights, Grads &gradients) const {}
 };
 
 template<class Index,class Spec>
 class weight_matrix {
 private:
-	typedef decltype(at_spec<Index>(std::declval<Spec>())) spec_type;
+	typedef typename std::remove_reference<decltype(at_spec<Index>(std::declval<Spec>()))>::type spec_type;
 	//typedef typename ::netops::detail::at_spec<Index,Spec>::type spec_type;
 
 public:
@@ -284,7 +284,7 @@ public:
 	}
 
 	template<class Derived,class Input,class Weights,class Grads>
-	void bprop(const Eigen::MatrixBase<Derived> &in, const Input &input, const Weights &weights, const Grads &gradients) const {
+	void bprop(const Eigen::MatrixBase<Derived> &in, const Input &input, const Weights &weights, Grads &gradients) const {
 		const auto &eval_in = in.eval();
 		auto colit = cols_.begin();
 		boost::fusion::fold(exprs_, std::size_t(0), [&eval_in, &input, &weights, &gradients, &colit] (std::size_t s, auto &e) {
@@ -322,7 +322,7 @@ public:
 	}
 
 	template<class Derived,class Input,class Weights,class Grads>
-	void bprop(const Eigen::MatrixBase<Derived> &in, const Input &input, const Weights &weights, const Grads &gradients) const {
+	void bprop(const Eigen::MatrixBase<Derived> &in, const Input &input, const Weights &weights, Grads &gradients) const {
 		const auto &eval_in = in.eval();
 		a_.bprop(eval_in, input, weights, gradients);
 		b_.bprop(eval_in.colwise().sum(), input, weights, gradients);
@@ -357,7 +357,7 @@ public:
 	}
 
 	template<class Derived,class Input,class Weights,class Grads>
-	void bprop(const Eigen::MatrixBase<Derived> &in, const Input &input, const Weights &weights, const Grads &gradients) const {
+	void bprop(const Eigen::MatrixBase<Derived> &in, const Input &input, const Weights &weights, Grads &gradients) const {
 		const auto &eval_in = in.eval();
 		b_(input, weights, [this, &eval_in, &gradients] (auto &&i, auto &&w, auto &&b) {
 			this->a_.bprop(eval_in * b.transpose(), i, w, gradients);
@@ -392,7 +392,7 @@ public:
 	}
 
 	template<class Derived,class Input,class Weights,class Grads>
-	void bprop(const Eigen::MatrixBase<Derived> &in, const Input &input, const Weights &weights, const Grads &gradients) const {
+	void bprop(const Eigen::MatrixBase<Derived> &in, const Input &input, const Weights &weights, Grads &gradients) const {
 		a_.bprop((in.array() * result_ * (1 - result_)).matrix(), input, weights, gradients);
 	}
 
@@ -429,7 +429,7 @@ public:
 	}
 
 	template<class Derived,class Input,class Weights,class Grads>
-	void bprop_loss(const Eigen::MatrixBase<Derived> &targets, const Input &input, const Weights &weights, const Grads &gradients) const {
+	void bprop_loss(const Eigen::MatrixBase<Derived> &targets, const Input &input, const Weights &weights, Grads &gradients) const {
 		a_.bprop(result_.matrix() - targets, input, weights, gradients);
 	}
 
@@ -495,7 +495,7 @@ public:
 	}
 
 	template<class Derived,class Data,class Grads>
-	void bprop(const Eigen::MatrixBase<Derived> &in, const Data &data, const Grads &gradients) const {
+	void bprop(const Eigen::MatrixBase<Derived> &in, const Data &data, Grads &gradients) const {
 		const auto &eval_in = in.rowwise().sum().eval();
 
 		Grads subgrads(gradients);
@@ -548,7 +548,7 @@ public:
 	}
 
 	template<class Derived,class Input,class Weights,class Grads>
-	void bprop(const Eigen::MatrixBase<Derived> &in, const Input &input, const Weights &weights, const Grads &gradients) const {
+	void bprop(const Eigen::MatrixBase<Derived> &in, const Input &input, const Weights &weights, Grads &gradients) const {
 		const auto &eval_in = in.eval();
 		ant_.bprop(mapmat_.transpose() * eval_in, input, weights, gradients);
 		map_matrix backmat(mapmat_);
@@ -610,7 +610,7 @@ public:
 	}
 
 	template<class Derived,class Input,class Weights,class Grads>
-	void bprop(const Eigen::MatrixBase<Derived> &in, const Input &input, const Weights &weights, const Grads &gradients) const {
+	void bprop(const Eigen::MatrixBase<Derived> &in, const Input &input, const Weights &weights, Grads &gradients) const {
 		const auto &eval_in = in.eval();
 		Eigen::Matrix<F,A::RowsAtCompileTime,ColsAtCompileTime,StorageOrder> outgrads;
 		outgrads.resizeLike(maxmask_);
