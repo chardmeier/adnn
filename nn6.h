@@ -10,6 +10,7 @@
 
 #include <boost/algorithm/string/case_conv.hpp>
 #include <boost/array.hpp>
+#include <boost/fusion/include/as_vector.hpp>
 #include <boost/fusion/include/back.hpp>
 #include <boost/fusion/include/boost_array.hpp>
 #include <boost/fusion/include/make_vector.hpp>
@@ -384,8 +385,8 @@ auto lweights(std::size_t rows, std::size_t cols) {
 		nnet::mat_size<Float>(rows, cols), nnet::vec_size<Float>(cols));
 }
 
-template<class Float,class Inputs,class Targets>
-auto make_nn6(const Inputs &input, const Targets &targets,
+template<class Float,class Inputs>
+auto make_nn6(const Inputs &input,
 		std::size_t size_U, std::size_t size_antembed, std::size_t size_srcembed, std::size_t size_hidden) {
 	auto ispec = nnet::data_to_spec(input);
 	int size_T = netops::at_spec<idx::I_T>(ispec).cols();
@@ -401,8 +402,6 @@ auto make_nn6(const Inputs &input, const Targets &targets,
 			lweights<Float>(size_hidden, NCLASSES));
 
 	typedef nnet::weights<Float,decltype(wspec)> weights;
-
-	//auto spec = fusion::make_vector(ispec, wspec);
 
 	using namespace netops;
 	auto &&net = softmax_crossentropy(linear_layer<idx::W_hidout>(wspec,
@@ -450,7 +449,7 @@ auto nn6_dataset<InputSeq,Targets>::subset(std::size_t from, std::size_t to) con
 		fusion::make_vector(
 			fusion::make_vector(A.middleRows(from_ant, n_ant).eval(), T.middleRows(from_ant, n_ant).eval(),
 				antmap.middleRows(from, nexmpl).eval()),
-			fusion::transform(srcctx, [from, nexmpl] (auto &m) { return m.middleRows(from, nexmpl).eval(); })),
+			fusion::as_vector(fusion::transform(srcctx, [from, nexmpl] (const auto &m) { return m.middleRows(from, nexmpl).eval(); }))),
 		targets_.middleRows(from, nexmpl).eval());
 }
 
