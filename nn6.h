@@ -49,8 +49,8 @@ public:
 			boost::array<sparse_matrix,7>> input_seq;
 */
 
-	nn6_dataset(input_seq &&input, Targets &&targets) :
-		input_(std::forward<InputSeq>(input)), targets_(std::forward<Targets>(targets)) {}
+	nn6_dataset(int nlink, input_seq &&input, Targets &&targets) :
+		nlink_(nlink), input_(std::forward<InputSeq>(input)), targets_(std::forward<Targets>(targets)) {}
 
 	const input_seq &sequence() const {
 		return input_;
@@ -58,6 +58,10 @@ public:
 
 	auto spec() const {
 		return nnet::data_to_spec(input_);
+	}
+
+	int nlink() const {
+		return nlink_;
 	}
 
 	std::size_t nitems() const {
@@ -78,6 +82,7 @@ public:
 	batch_iterator batch_end() const;
 
 private:
+	int nlink_;
 	input_seq input_;
 	Targets targets_;
 };
@@ -146,8 +151,8 @@ nn6_dataset<InputSeq,Targets>::batch_end() const {
 }
 
 template<class InputSeq,class Targets>
-auto make_nn6_dataset(InputSeq &&input, Targets &&targets) {
-	return nn6_dataset<InputSeq,Targets>(std::forward<InputSeq>(input), std::forward<Targets>(targets));
+auto make_nn6_dataset(int nlink, InputSeq &&input, Targets &&targets) {
+	return nn6_dataset<InputSeq,Targets>(nlink, std::forward<InputSeq>(input), std::forward<Targets>(targets));
 }
 
 namespace idx {
@@ -231,12 +236,19 @@ voc_id voc_lookup(const std::string &word, vocmap &voc, bool extend = false) {
 }
 
 template<class Float>
-auto load_nn6(const std::string &file, vocmap &srcvocmap, vocmap &antvocmap) {
+auto load_nn6(const std::string &file, vocmap &srcvocmap, vocmap &antvocmap, int nlink = -1) {
 	typedef Eigen::SparseMatrix<Float,Eigen::RowMajor> sparse_matrix;
 	typedef Eigen::Matrix<Float,Eigen::Dynamic,Eigen::Dynamic,Eigen::RowMajor> matrix;
 	typedef Eigen::Matrix<int,Eigen::Dynamic,1> int_vector;
 
 	bool make_vocabulary = srcvocmap.map.size() <= 1;
+
+	bool set_nlink;
+	if(nlink < 0) {
+		set_nlink = true;
+		nlink = 0;
+	} else
+		set_nlink = false;
 
 	std::ifstream is(file);
 	if(!is.good())
@@ -244,7 +256,6 @@ auto load_nn6(const std::string &file, vocmap &srcvocmap, vocmap &antvocmap) {
 
 	std::size_t nexmpl = 0;
 	std::size_t nant = 0;
-	std::size_t nlink = 0;
 
 	std::vector<std::string> nn6_lines;
 	for(std::string line; getline(is, line);) {
@@ -252,9 +263,9 @@ auto load_nn6(const std::string &file, vocmap &srcvocmap, vocmap &antvocmap) {
 			nexmpl++;
 		else if(line.compare(0, 10, "ANTECEDENT") == 0)
 			nant++;
-		else if(line.compare(0, 2, "-1") == 0) {
+		else if(line.compare(0, 2, "-1") == 0 && set_nlink) {
 			std::istringstream ss(line);
-			std::size_t idx;
+			int idx;
 			char colon;
 			Float val;
 			ss >> idx; // get rid of -1 at the beginning
@@ -341,7 +352,8 @@ auto load_nn6(const std::string &file, vocmap &srcvocmap, vocmap &antvocmap) {
 			char colon;
 			Float fval;
 			while(ss >> fidx >> colon >> fval)
-				T(ant, fidx - 1) = fval;
+				if(fidx <= nlink)
+					T(ant, fidx - 1) = fval;
 		}
 	}
 
@@ -373,7 +385,7 @@ auto load_nn6(const std::string &file, vocmap &srcvocmap, vocmap &antvocmap) {
 	wordinput_type R3(nexmpl, srcvocmap.map.size());
 	R3.setFromTriplets(srcctx_triplets[6].begin(), srcctx_triplets[6].end());
 
-	return make_nn6_dataset(
+	return make_nn6_dataset(nlink,
 		fusion::make_vector(fusion::make_vector(A, T, antmap),
 			boost::array<wordinput_type,7>({ L3, L2, L1, P, R1, R2, R3 })),
 		std::move(targets));
@@ -445,7 +457,7 @@ auto nn6_dataset<InputSeq,Targets>::subset(std::size_t from, std::size_t to) con
 	int nexmpl = std::min(to, nitems()) - from;
 	int from_ant = antmap.head(from).sum();
 	int n_ant = antmap.middleRows(from, nexmpl).sum();
-	return make_nn6_dataset(
+	return make_nn6_dataset(nlink_,
 		fusion::make_vector(
 			fusion::make_vector(A.middleRows(from_ant, n_ant).eval(), T.middleRows(from_ant, n_ant).eval(),
 				antmap.middleRows(from, nexmpl).eval()),
