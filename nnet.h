@@ -24,12 +24,6 @@
 
 #include <Eigen/Core>
 
-#ifdef __ICC
-#define DECLVAL(C) (*static_cast<C>(nullptr))
-#else
-#define DECLVAL(C) std::declval<C>
-#endif
-
 namespace nnet {
 
 template<class F,int Rows = Eigen::Dynamic,int Cols = Eigen::Dynamic>
@@ -398,7 +392,7 @@ struct data_to_spec {
 
 template<class Data>
 auto data_to_spec::operator()(const Data &d, std::enable_if_t<boost::fusion::traits::is_sequence<Data>::type::value>*) const {
-	return boost::fusion::transform(d, data_to_spec());
+	return boost::fusion::as_vector(boost::fusion::transform(d, data_to_spec()));
 }
 
 template<class Derived>
