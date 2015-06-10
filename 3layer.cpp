@@ -23,14 +23,12 @@ auto precision_recall(const Eigen::MatrixBase<Derived1> &pred, const Eigen::Matr
 }
 
 int main() {
-	typedef nnet::mlp<boost::fusion::vector<nnet::sigmoid,nnet::softmax>,double> net_type;
-
-	net_type net(7, 100, 3);
-	nnet::crossentropy_loss loss;
-
-	net_type::dataset data;
+	mlp::mlp_dataset<double> data;
 
 	#include "seeds.data"
+
+	auto net = mlp::make_mlp<double>(data.sequence(), 100);
+	typedef decltype(net) net_type;
 
 	std::size_t split1 = std::floor(.6 * data.nitems());
 	std::size_t split2 = std::floor(.8 * data.nitems());
@@ -41,7 +39,7 @@ int main() {
 	const auto &testset = data.subset(split2, data.nitems());
 	
 	nnet::nnopt<net_type> opt(net);
-	nnet::nnopt_results<net_type> res = opt.train(net, loss, trainset, valset);
+	nnet::nnopt_results<net_type> res = opt.train(net, trainset, valset);
 
 	std::cout << "Training error: ";
 	std::copy(res.trainerr.begin(), res.trainerr.end(), std::ostream_iterator<net_type::float_type>(std::cout, " "));
@@ -49,9 +47,11 @@ int main() {
 	std::copy(res.valerr.begin(), res.valerr.end(), std::ostream_iterator<net_type::float_type>(std::cout, " "));
 	std::cout << std::endl;
 
-	const auto &testout = net(res.best_weights, testset.inputs());
+/*
+	const auto &testout = net(res.best_weights, testset.sequence());
 	std::cout << "Test error: " << evaluate_loss(loss, testout, testset.targets()) << '\n';
 	std::cout << "Precision/recall:\n" << precision_recall(testout.matrix(), testset.targets().matrix()) << std::endl;
+*/
 
 	return 0;
 }
