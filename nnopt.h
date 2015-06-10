@@ -81,9 +81,9 @@ nnopt_results<Net> nnopt<Net>::train(Net &net, const TrainingDataset &trainset, 
 		for(auto batchit = trainset.batch_begin(batchsize_); batchit != trainset.batch_end(); ++batchit, ++batchcnt) {
 			weight_type grad(net.spec(), ZERO);
 			std::chrono::system_clock::time_point t1 = std::chrono::system_clock::now();
-			auto output = net(ww, batchit->input());
+			auto output = net(ww, batchit->sequence());
 			std::chrono::system_clock::time_point t2 = std::chrono::system_clock::now();
-			net.bprop(batchit->input(), batchit->targets(), ww, grad);
+			net.bprop(batchit->sequence(), batchit->targets(), ww, grad);
 			err += net.error(output, batchit->targets()) / nbatches;
 			std::chrono::system_clock::time_point t3 = std::chrono::system_clock::now();
 			grad.array() += l2reg_ * ww.array();
@@ -115,16 +115,16 @@ nnopt_results<Net> nnopt<Net>::train(Net &net, const TrainingDataset &trainset, 
 
 			std::chrono::system_clock::time_point t4 = std::chrono::system_clock::now();
 			std::cerr <<
-				std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() << "us - " <<
-				std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2).count() << "us - " <<
-				std::chrono::duration_cast<std::chrono::microseconds>(t4 - t3).count() << "us - " <<
-				err << std::endl;
+				"fprop: " << std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() << "us - " <<
+				"bprop: " << std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2).count() << "us - " <<
+				"sgd: " << std::chrono::duration_cast<std::chrono::microseconds>(t4 - t3).count() << "us - " <<
+				"err: " << err << std::endl;
 			if(batchcnt % progress == 0 && batchcnt > 0)
-				std::cerr << '.';
+				std::cerr << "batchcnt: " << batchcnt << std::endl; // '.';
 		}
 		results.trainerr.push_back(err);
 
-		auto valout = net(ww, valset.input());
+		auto valout = net(ww, valset.sequence());
 		//std::cerr << "ww.w1\n" << ww.w1() << "\nvalout:\n" << valout.matrix() << std::endl;
 		results.valerr.push_back(net.error(valout, valset.targets()));
 		if(results.valerr.back() < results.best_valerr) {
