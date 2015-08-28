@@ -33,13 +33,13 @@ int main(int argc, char **argv) {
 	boost::property_tree::ptree params;
 	boost::property_tree::read_xml(argv[1], params);
 
-	std::string train_nn6 = params.get<std::string>("data.train");
-	std::string val_nn6 = params.get<std::string>("data.val");
+	std::string train_nn6 = params.get<std::string>("nn6.data.train");
+	std::string val_nn6 = params.get<std::string>("nn6.data.val");
 
-	std::size_t size_U = params.get<std::size_t>("layers.U");
-	std::size_t size_antembed = params.get<std::size_t>("layers.antembed");
-	std::size_t size_srcembed = params.get<std::size_t>("layers.srcembed");
-	std::size_t size_hidden = params.get<std::size_t>("layers.hidden");
+	std::size_t size_U = params.get<std::size_t>("nn6.layers.U");
+	std::size_t size_antembed = params.get<std::size_t>("nn6.layers.antembed");
+	std::size_t size_srcembed = params.get<std::size_t>("nn6.layers.srcembed");
+	std::size_t size_hidden = params.get<std::size_t>("nn6.layers.hidden");
 
 	nn6::vocmap srcvocmap;
 	nn6::vocmap antvocmap;
@@ -50,7 +50,7 @@ int main(int argc, char **argv) {
 	auto net = nn6::make_nn6<double>(train.input(), size_U, size_antembed, size_srcembed, size_hidden);
 	typedef decltype(net) net_type;
 
-	nnet::nnopt<net_type> opt(net, params.get_child("nnopt"));
+	nnet::nnopt<net_type> opt(net, params.get_child("nn6.nnopt"));
 	nnet::nnopt_results<net_type> res = opt.train(net, train, val);
 
 	std::cout << "Training error: ";
