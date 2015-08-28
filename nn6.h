@@ -202,7 +202,7 @@ public:
 
 	template<class OutputType,class TargetType>
 	float_type error(const OutputType &output, const TargetType &targets) const {
-		return -(targets.array() * output.array().log()).sum();
+		return -(targets.array() * output.array().log()).sum() / output.rows();
 	}
 };
 
