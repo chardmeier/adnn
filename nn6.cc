@@ -4,7 +4,8 @@
 #include <limits>
 #include <vector>
 
-#include <boost/lexical_cast.hpp>
+#include <boost/property_tree/ptree.hpp>
+#include <boost/property_tree/xml_parser.hpp>
 
 #include "nn6.h"
 #include "nnopt.h"
@@ -25,16 +26,20 @@ auto precision_recall(const Eigen::MatrixBase<Derived1> &pred, const Eigen::Matr
 }
 
 int main(int argc, char **argv) {
-	if(argc != 7) {
-		std::cerr << "Usage: nn6 train.nn6 val.nn6 U antembed srcembed hidden" << std::endl;
+	if(argc != 2) {
+		std::cerr << "Usage: nn6 config.xml" << std::endl;
 		return 1;
 	}
-	std::string train_nn6 = argv[1];
-	std::string val_nn6 = argv[2];
-	std::size_t size_U = boost::lexical_cast<std::size_t>(argv[3]);
-	std::size_t size_antembed = boost::lexical_cast<std::size_t>(argv[4]);
-	std::size_t size_srcembed = boost::lexical_cast<std::size_t>(argv[5]);
-	std::size_t size_hidden = boost::lexical_cast<std::size_t>(argv[6]);
+	boost::property_tree::ptree params;
+	boost::property_tree::read_xml(argv[1], params);
+
+	std::string train_nn6 = params.get<std::string>("data.train");
+	std::string val_nn6 = params.get<std::string>("data.val");
+
+	std::size_t size_U = params.get<std::size_t>("layers.U");
+	std::size_t size_antembed = params.get<std::size_t>("layers.antembed");
+	std::size_t size_srcembed = params.get<std::size_t>("layers.srcembed");
+	std::size_t size_hidden = params.get<std::size_t>("layers.hidden");
 
 	nn6::vocmap srcvocmap;
 	nn6::vocmap antvocmap;
@@ -45,7 +50,7 @@ int main(int argc, char **argv) {
 	auto net = nn6::make_nn6<double>(train.input(), size_U, size_antembed, size_srcembed, size_hidden);
 	typedef decltype(net) net_type;
 
-	nnet::nnopt<net_type> opt(net);
+	nnet::nnopt<net_type> opt(net, params.get_child("nnopt"));
 	nnet::nnopt_results<net_type> res = opt.train(net, train, val);
 
 	std::cout << "Training error: ";

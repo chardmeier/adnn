@@ -40,6 +40,9 @@ private:
 public:
 	nnopt(const Net &net);
 
+	template<class Params>
+	nnopt(const Net &net, const Params &params);
+
 	template<class TrainingDataset,class ValidationDataset>
 	nnopt_results<Net> train(Net &net, const TrainingDataset &trainset, const ValidationDataset &valset) const;
 };
@@ -50,6 +53,19 @@ nnopt<Net>::nnopt(const Net &net) :
 		initial_learning_rate_(.001), learning_schedule_(20),
 		momentum_(.9), l2reg_(.001) {
 	init_weights_.init_normal(.01);
+}
+
+template<class Net>
+template<class Params>
+nnopt<Net>::nnopt(const Net &net, const Params &params) :
+		nsteps_(params.template get<int>("nsteps", 1)),
+		batchsize_(params.template get<std::size_t>("batchsize", 100)),
+		init_weights_(net.spec()),
+		initial_learning_rate_(params.template get<float_type>("learning-rate", .001)),
+		learning_schedule_(params.template get<float_type>("learning-schedule", .001)),
+		momentum_(params.template get<float_type>("momentum", .001)),
+		l2reg_(params.template get<float_type>("l2reg", .001)) {
+	init_weights_.init_normal(params.template get<float_type>("stddev", .01));
 }
 
 template<class Net>
