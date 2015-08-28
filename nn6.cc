@@ -55,15 +55,17 @@ int main(int argc, char **argv) {
 	nnet::nnopt<net_type> opt(net, params.get_child("nn6.nnopt"));
 	nnet::nnopt_results<net_type> res = opt.train(net, train, val);
 
-	std::cout << "Training error: ";
-	std::copy(res.trainerr.begin(), res.trainerr.end(), std::ostream_iterator<net_type::float_type>(std::cout, " "));
-	std::cout << "\nValidation error: ";
-	std::copy(res.valerr.begin(), res.valerr.end(), std::ostream_iterator<net_type::float_type>(std::cout, " "));
-	std::cout << std::endl;
+	std::cerr << "Training error: ";
+	std::copy(res.trainerr.begin(), res.trainerr.end(), std::ostream_iterator<net_type::float_type>(std::cerr, " "));
+	std::cerr << "\nValidation error: ";
+	std::copy(res.valerr.begin(), res.valerr.end(), std::ostream_iterator<net_type::float_type>(std::cerr, " "));
+	std::cerr << std::endl;
 
 	auto testout = net(res.best_weights, testset.sequence());
-	std::cout << "Test error: " << net.error(testout, testset.targets()) << '\n';
-	std::cout << "Precision/recall:\n" << precision_recall(testout.matrix(), testset.targets().matrix()) << std::endl;
+	std::cerr << "Test error: " << net.error(testout, testset.targets()) << '\n';
+	std::cerr << "Precision/recall:\n" << precision_recall(testout.matrix(), testset.targets().matrix()) << std::endl;
+
+	std::cout << res.best_weights << std::endl;
 
 	return 0;
 }
