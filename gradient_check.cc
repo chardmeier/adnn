@@ -19,9 +19,6 @@ typedef double Float;
 typedef Eigen::Matrix<Float,Eigen::Dynamic,Eigen::Dynamic> matrix;
 typedef Eigen::Matrix<Float,1,Eigen::Dynamic> vector;
 
-typedef boost::fusion::vector4<nnet::mat_size<Float>,nnet::vec_size<Float>,nnet::mat_size<Float>,nnet::vec_size<Float>> spec_type;
-typedef nnet::weights<Float,spec_type> weights;
-
 void get_data(matrix &inputs, matrix &targets);
 
 /*
@@ -37,26 +34,27 @@ auto make_net(const matrix &input, const weights &ww, weights &grad) {
 }
 */
 
-template<int N,class Net>
-void check(const Net &net, const matrix &input, const weights &ww, const weights &grad, const matrix &targets, int i, int j) {
+template<int M,int N,class Net,class Weights>
+void check(const Net &net, const matrix &input, const Weights &ww, const Weights &grad, const matrix &targets, int i, int j) {
 	const Float EPS = 1e-4f;
 
-	weights disturb(ww);
-	weights xgrad(ww);
+	Weights disturb(ww);
+	Weights xgrad(ww);
 
-	Float ow = ww.template at<N>()(i,j);
+	typedef mpl::vector2_c<int,M,N> Idx;
+	Float ow = netops::at_spec<Idx>(ww.sequence())(i,j);
 
-	disturb.template at<N>()(i,j) = ow + EPS;
+	netops::at_spec<Idx>(disturb.sequence())(i,j) = ow + EPS;
 	matrix out1 = net.fprop(fusion::make_vector(input, disturb.sequence()));
 	Float j1 = -targets.cwiseProduct(out1.array().log().matrix()).sum();
 
-	disturb.template at<N>()(i,j) = ow - EPS;
+	netops::at_spec<Idx>(disturb.sequence())(i,j) = ow - EPS;
 	matrix out2 = net.fprop(fusion::make_vector(input, disturb.sequence()));
 	Float j2 = -targets.cwiseProduct(out2.array().log().matrix()).sum();
 
 	Float g = (j1 - j2) / (2 * EPS);
 
-	std::cout << N << '(' << i << ',' << j << "): " << g << " == " << grad.template at<N>()(i,j) << std::endl;
+	std::cout << M << ',' << N << '(' << i << ',' << j << "): " << g << " == " << netops::at_spec<Idx>(grad.sequence())(i,j) << std::endl;
 }
 
 int main() {
@@ -66,21 +64,22 @@ int main() {
 
 	get_data(input, targets);
 
-	spec_type spec(nnet::mat_size<Float>(7,10), nnet::vec_size<Float>(10), nnet::mat_size<Float>(10,3), nnet::vec_size<Float>(3));
-	//spec_type spec(nnet::mat_size<Float>(7,10));
+	auto spec = fusion::make_vector(fusion::make_vector(nnet::mat_size<Float>(7,10), nnet::vec_size<Float>(10)),
+			fusion::make_vector(nnet::mat_size<Float>(10,3), nnet::vec_size<Float>(3)));
+
+	typedef nnet::weights<Float,decltype(spec)> weights;
+
 	auto inputspec = fusion::make_vector(nnet::mat_size<Float>(input.rows(), input.cols()), spec);
 
 	typedef mpl::vector1_c<int,0> I;
 	typedef mpl::vector2_c<int,1,0> W1;
-	typedef mpl::vector2_c<int,1,1> B1;
-	typedef mpl::vector2_c<int,1,2> W2;
-	typedef mpl::vector2_c<int,1,3> B2;
+	typedef mpl::vector2_c<int,1,1> W2;
 
 	using namespace netops;
 	//auto net = softmax_crossentropy(logistic_sigmoid(input_matrix<I>(inputspec) * weight_matrix<W1>(inputspec) + weight_matrix<B1>(inputspec)) *
 	//					weight_matrix<W2>(inputspec) + weight_matrix<B2>(inputspec));
 	
-	auto net = softmax_crossentropy(linear_layer<W2,B2>(inputspec, logistic_sigmoid(linear_layer<W1,B1>(inputspec, input_matrix<I>(inputspec)))));
+	auto net = softmax_crossentropy(linear_layer<W2>(inputspec, logistic_sigmoid(linear_layer<W1>(inputspec, input_matrix<I>(inputspec)))));
 
 	weights ww(spec);
 	ww.init_normal(.1);
@@ -90,14 +89,14 @@ int main() {
 	matrix out = net.fprop(inputdata);
 	net.bprop_loss(targets, inputdata, fusion::make_vector(mpl::vector_c<int,0>(), grad.sequence()));
 
-	check<0>(net, input, ww, grad, targets, 3, 3);
-	check<0>(net, input, ww, grad, targets, 2, 4);
-	check<1>(net, input, ww, grad, targets, 0, 3);
-	check<1>(net, input, ww, grad, targets, 0, 6);
-	check<2>(net, input, ww, grad, targets, 3, 0);
-	check<2>(net, input, ww, grad, targets, 2, 2);
-	check<3>(net, input, ww, grad, targets, 0, 1);
-	check<3>(net, input, ww, grad, targets, 0, 2);
+	check<0,0>(net, input, ww, grad, targets, 3, 3);
+	check<0,0>(net, input, ww, grad, targets, 2, 4);
+	check<0,1>(net, input, ww, grad, targets, 0, 3);
+	check<0,1>(net, input, ww, grad, targets, 0, 6);
+	check<1,0>(net, input, ww, grad, targets, 3, 0);
+	check<1,0>(net, input, ww, grad, targets, 2, 2);
+	check<1,1>(net, input, ww, grad, targets, 0, 1);
+	check<1,1>(net, input, ww, grad, targets, 0, 2);
 
 	return 0;
 }
