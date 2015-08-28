@@ -1,16 +1,16 @@
-#OPT = -O3
-OPT =
+OPT = -O3 -march=native -ffast-math # -fopenmp
+#OPT =
 
 #CXX = icpc
 #CXX_FLAGS = -std=c++14 -DBOOST_RESULT_OF_USE_DECLTYPE -Wall -Wno-comment
 
 CXX = g++
-CXX_FLAGS = -std=c++14 -ftemplate-backtrace-limit=0 -Wall -Wno-unused-local-typedefs -march=native
+CXX_FLAGS = -std=c++14 -ftemplate-backtrace-limit=0 -Wall -Wno-unused-local-typedefs -Wno-deprecated-declarations
 
 #ADEPT_FLAGS = -DADEPT_INITIAL_STACK_LENGTH=2000000000 
 ADEPT_FLAGS = -DADEPT_INITIAL_STACK_LENGTH=100000
 
-MKL = 
+#MKL = 
 #MKL = -DEIGEN_MKL_USE_ALL -Wl,--start-group ${MKLROOT}/lib/intel64/libmkl_intel_ilp64.a \
 	${MKLROOT}/lib/intel64/libmkl_core.a ${MKLROOT}/lib/intel64/libmkl_intel_thread.a -Wl,--end-group \
 	-liomp5 -ldl -lpthread -lm \
@@ -44,7 +44,7 @@ lmtest:	lmtest.cpp $(NNET_HEADERS)
 	$(CXX) $(CXX_FLAGS) $(OPT) $(MKL) $(ADEPT_FLAGS) -o lmtest -g $(OPT) -I$(BOOST) -I$(EIGEN) -I$(ADEPT)/include -L$(ADEPT)/lib lmtest.cpp -ladept -lm
 
 nnopt:	3layer.cpp $(NNET_HEADERS)
-	$(CXX) -std=c++0x -o 3layer -g $(OPT) -Wall -Wno-unused-local-typedefs -I$(BOOST) -I$(EIGEN) -I$(ADEPT)/include -L$(ADEPT)/lib 3layer.cpp -ladept -lm
+	$(CXX) $(CXX_FLAGS) -o 3layer -g $(OPT) -Wall -Wno-unused-local-typedefs -I$(BOOST) -I$(EIGEN) 3layer.cpp -lm
 
 clean:
 	rm -f lmtest nnopt netops ptrtst gradient_check nn6_gradient_check nn6
