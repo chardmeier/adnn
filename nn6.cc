@@ -35,6 +35,7 @@ int main(int argc, char **argv) {
 
 	std::string train_nn6 = params.get<std::string>("nn6.data.train");
 	std::string val_nn6 = params.get<std::string>("nn6.data.val");
+	std::string test_nn6 = params.get<std::string>("nn6.data.test");
 
 	std::size_t size_U = params.get<std::size_t>("nn6.layers.U");
 	std::size_t size_antembed = params.get<std::size_t>("nn6.layers.antembed");
@@ -45,6 +46,7 @@ int main(int argc, char **argv) {
 	nn6::vocmap antvocmap;
 	auto train = nn6::load_nn6<double>(train_nn6, srcvocmap, antvocmap);
 	auto val = nn6::load_nn6<double>(val_nn6, srcvocmap, antvocmap, train.nlink());
+	auto testset = nn6::load_nn6<double>(test_nn6, srcvocmap, antvocmap, train.nlink());
 	std::cerr << "Data loaded." << std::endl;
 
 	auto net = nn6::make_nn6<double>(train.input(), size_U, size_antembed, size_srcembed, size_hidden);
@@ -59,11 +61,9 @@ int main(int argc, char **argv) {
 	std::copy(res.valerr.begin(), res.valerr.end(), std::ostream_iterator<net_type::float_type>(std::cout, " "));
 	std::cout << std::endl;
 
-/*
-	const auto &testout = net(res.best_weights, testset.inputs());
-	std::cout << "Test error: " << evaluate_loss(loss, testout, testset.targets()) << '\n';
+	auto testout = net(res.best_weights, testset.sequence());
+	std::cout << "Test error: " << net.error(testout, testset.targets()) << '\n';
 	std::cout << "Precision/recall:\n" << precision_recall(testout.matrix(), testset.targets().matrix()) << std::endl;
-*/
 
 	return 0;
 }
