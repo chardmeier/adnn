@@ -1,6 +1,8 @@
 #ifndef NNET_NET_WRAPPER_H
 #define NNET_NET_WRAPPER_H
 
+#include <chrono>
+
 #include <adept.h>
 
 #include <Eigen/SparseCore>
@@ -136,14 +138,21 @@ typename net_wrapper<N,Loss,F,A>::float_type net_wrapper<N,Loss,F,A>::operator()
 		const OutputType &targets, weight_type &grad) const {
 	static adept::Stack stack;
 	aweight_type aW(W);
-	//ainput_type ainp(inp.template cast<afloat_type>());
+	ainput_type ainp(inp.template cast<afloat_type>());
 	aoutput_type atargets(targets.template cast<afloat_type>());
 	stack.new_recording();
-	aoutput_type aout = net_(aW, inp);
+			std::chrono::system_clock::time_point t1 = std::chrono::system_clock::now();
+	aoutput_type aout = net_(aW, ainp);
+			std::chrono::system_clock::time_point t2 = std::chrono::system_clock::now();
 	afloat_type err = evaluate_loss(loss_, aout, atargets);
+			std::chrono::system_clock::time_point t3 = std::chrono::system_clock::now();
+			std::cerr <<
+				std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() << "us - " <<
+				std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2).count() << "us\n";
 	err.set_gradient(float_type(1));
 	stack.compute_adjoint();
 	grad = aW.transform(gradient_functor());
+	//std::cerr << stack;
 	//std::cerr << "w1 grad:\n" << grad.w1() << std::endl;
 	return err.value();
 }
