@@ -184,6 +184,16 @@ class weights;
 
 namespace detail {
 
+constexpr std::size_t align_round(std::size_t size) {
+	const std::size_t ALIGNMENT = 32; // alignment in bytes (a power of two)
+
+	const std::size_t MASK = ALIGNMENT - 1;
+	if((size & MASK) == 0)
+		return size;
+	else
+		return (size & ~MASK) + ALIGNMENT;
+}
+
 template<class FF>
 struct create_weight_maps {
 /*
@@ -238,7 +248,7 @@ public:
 
 	weights(const spec_type &spec) :
 			spec_(spec),
-			data_(boost::fusion::accumulate(boost::fusion::flatten(spec_), std::size_t(0), [] (std::size_t s, const auto &spec) { return s + spec.size(); }), 1),
+			data_(boost::fusion::accumulate(boost::fusion::flatten(spec_), std::size_t(0), [] (std::size_t s, const auto &spec) { return s + detail::align_round(spec.size()); }), 1),
 			mat_(detail::create_weight_maps<FF>().process_sequence(spec_, data_.data())) {}
 
 	// Eigen::Map has no copy constructor
@@ -258,7 +268,7 @@ public:
 
 	weights(const spec_type &spec, const FF &value) :
 			spec_(spec),
-			data_(boost::fusion::accumulate(boost::fusion::flatten(spec_), std::size_t(0), [] (std::size_t s, const auto &spec) { return s + spec.size(); }), 1),
+			data_(boost::fusion::accumulate(boost::fusion::flatten(spec_), std::size_t(0), [] (std::size_t s, const auto &spec) { return s + detail::align_round(spec.size()); }), 1),
 			mat_(detail::create_weight_maps<FF>().process_sequence(spec_, data_.data())) {
 		data_.setConstant(value);
 	}
@@ -356,8 +366,8 @@ auto create_weight_maps<FF>::process_sequence(const It1 &it1, const It2 &it2, FF
 template<class FF>
 template<class Type>
 auto create_weight_maps<FF>::process_element(const spec<Type> &e, FF *data) const {
-	typedef Eigen::Map<Eigen::Matrix<FF,Type::RowsAtCompileTime,Type::ColsAtCompileTime,Type::StorageOrder>> map_type;
-	FF *newpos = data + e.size();
+	typedef Eigen::Map<Eigen::Matrix<FF,Type::RowsAtCompileTime,Type::ColsAtCompileTime,Type::StorageOrder>,Eigen::Aligned> map_type;
+	FF *newpos = data + align_round(e.size());
 	return std::make_pair(map_type(data, e.rows(), e.cols()), newpos);
 }
 
