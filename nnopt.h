@@ -78,6 +78,7 @@ nnopt_results<Net> nnopt<Net>::train(Net &net, const TrainingDataset &trainset, 
 		float_type err = 0;
 		float_type alpha = initial_learning_rate_ / (ONE + float_type(i) / learning_schedule_);
 		std::size_t batchcnt = 0;
+		std::chrono::system_clock::time_point t_epoch_start = std::chrono::system_clock::now();
 		for(auto batchit = trainset.batch_begin(batchsize_); batchit != trainset.batch_end(); ++batchit, ++batchcnt) {
 			weight_type grad(net.spec(), ZERO);
 			std::chrono::system_clock::time_point t1 = std::chrono::system_clock::now();
@@ -114,13 +115,16 @@ nnopt_results<Net> nnopt<Net>::train(Net &net, const TrainingDataset &trainset, 
 			prev_grad = grad;
 
 			std::chrono::system_clock::time_point t4 = std::chrono::system_clock::now();
+/*
 			std::cerr <<
 				"fprop: " << std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() << "us - " <<
 				"bprop: " << std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2).count() << "us - " <<
 				"sgd: " << std::chrono::duration_cast<std::chrono::microseconds>(t4 - t3).count() << "us - " <<
 				"err: " << err << std::endl;
+*/
 			if(batchcnt % progress == 0 && batchcnt > 0)
-				std::cerr << "batchcnt: " << batchcnt << std::endl; // '.';
+				//std::cerr << "batchcnt: " << batchcnt << std::endl; // '.';
+				std::cerr << '.';
 		}
 		results.trainerr.push_back(err);
 
@@ -131,11 +135,14 @@ nnopt_results<Net> nnopt<Net>::train(Net &net, const TrainingDataset &trainset, 
 			results.best_valerr = results.valerr.back();
 			results.best_weights = ww;
 		}
+		std::chrono::system_clock::time_point t_epoch_end = std::chrono::system_clock::now();
 
 		std::time_t t = std::time(nullptr);
 		char time[80];
 		std::strftime(time, sizeof(time), "%c", std::localtime(&t));
-		std::cerr << '\n' << time << ": " << i << " (" << alpha << "): Training error: " <<
+		std::cerr << '\n' << time << " (" <<
+			std::chrono::duration_cast<std::chrono::milliseconds>(t_epoch_end - t_epoch_start).count() <<
+			"ms): " << i << " (" << alpha << "): Training error: " <<
 			results.trainerr.back() << ", validation error: " << results.valerr.back() << std::endl;
 	}
 
