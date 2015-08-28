@@ -166,11 +166,11 @@ public:
 	void operator()(const pair<InpMat,const pair<WMat,BiasMat>& > &mm) const {
 		using boost::fusion::at_c;
 		const InpMat &inp = at_c<0>(mm);
+		const WMat &w = at_c<0>(at_c<1>(mm));
+		const BiasMat &b = at_c<1>(at_c<1>(mm));
 		std_matrix<typename embed_type::Scalar> embedded_inp(inp.rows(), embed_.cols());
 		for(int i = 0; i < inp.rows(); i++)
 			embedded_inp.row(i) = embed_.row(inp(i, 0));
-		const WMat &w = at_c<0>(at_c<1>(mm));
-		const BiasMat &b = at_c<1>(at_c<1>(mm));
 		out_.noalias() += (embedded_inp * w).rowwise() + b;
 	}
 };
@@ -184,11 +184,18 @@ auto lblm<Order,A>::operator()(const weight_type<FF> &w, const input_type<InputM
 	const auto &wseq = w.sequence();
 	const auto &embed = fusion::at_c<0>(fusion::front(wseq));
 	const auto &embed_bias = fusion::at_c<1>(fusion::front(wseq));
-	std_matrix<FF> out(inp.nitems(), embed_size_);
-	out.setZero();
+	std_matrix<FF> sum(inp.nitems(), embed_size_);
+	sum.setZero();
+			std::chrono::system_clock::time_point t1 = std::chrono::system_clock::now();
 	fusion::for_each(fusion::zip(inp.sequence(), fusion::pop_front(wseq)),
-		detail_lblm::process_lblm<decltype(embed),decltype(out)>(embed, out));
-	return output_type<std_matrix<FF> >(fusion::make_vector(invoke_activation<softmax>((out * embed.transpose()).rowwise() + embed_bias).eval()));
+		detail_lblm::process_lblm<decltype(embed),decltype(sum)>(embed, sum));
+			std::chrono::system_clock::time_point t2 = std::chrono::system_clock::now();
+	std_matrix<FF> outmat = invoke_activation<softmax>((sum * embed.transpose()).rowwise() + embed_bias);
+			std::chrono::system_clock::time_point t3 = std::chrono::system_clock::now();
+			std::cerr << "### " <<
+				std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() << "us - " <<
+				std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2).count() << "us\n";
+	return output_type<std_matrix<FF> >(fusion::make_vector(outmat));
 }
 
 struct lblm_energy {
