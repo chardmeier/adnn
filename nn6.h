@@ -206,7 +206,8 @@ public:
 	}
 };
 
-enum { CE, CELA, ELLE, ELLES, IL, ILS, ON, CA, OTHER, NCLASSES };
+//enum { CE, CELA, ELLE, ELLES, IL, ILS, ON, CA, OTHER, NCLASSES };
+enum { CE, CELA, ELLE, ELLES, IL, ILS, ON, OTHER, NCLASSES };
 
 struct vocmap {
 	typedef std::unordered_map<std::string,voc_id> map_type;
@@ -291,9 +292,12 @@ auto load_nn6(const std::string &file, vocmap &srcvocmap, vocmap &antvocmap, int
 	classmap.insert(std::make_pair("il", IL));
 	classmap.insert(std::make_pair("ils", ILS));
 	classmap.insert(std::make_pair("on", ON));
-	classmap.insert(std::make_pair("ça", CA));
-	classmap.insert(std::make_pair("ca", CA));
-	classmap.insert(std::make_pair("ç'", CA));
+	//classmap.insert(std::make_pair("ça", CA));
+	//classmap.insert(std::make_pair("ca", CA));
+	//classmap.insert(std::make_pair("ç'", CA));
+	classmap.insert(std::make_pair("ça", CELA));
+	classmap.insert(std::make_pair("ca", CELA));
+	classmap.insert(std::make_pair("ç'", CELA));
 
 	matrix targets(nexmpl, static_cast<int>(NCLASSES));
 	vector nada(nexmpl);
