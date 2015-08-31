@@ -33,6 +33,7 @@ private:
 	std::size_t batchsize_;
 	weight_type init_weights_;
 	float_type initial_learning_rate_;
+	float_type rate_decay_;
 	float_type learning_schedule_;
 	float_type momentum_;
 	float_type l2reg_;
@@ -50,7 +51,7 @@ public:
 template<class Net>
 nnopt<Net>::nnopt(const Net &net) :
 		nsteps_(1), batchsize_(100), init_weights_(net.spec()),
-		initial_learning_rate_(.001), learning_schedule_(20),
+		initial_learning_rate_(.001), rate_decay_(1), learning_schedule_(20),
 		momentum_(.9), l2reg_(.001) {
 	init_weights_.init_normal(.01);
 }
@@ -62,6 +63,7 @@ nnopt<Net>::nnopt(const Net &net, const Params &params) :
 		batchsize_(params.template get<std::size_t>("batchsize", 100)),
 		init_weights_(net.spec()),
 		initial_learning_rate_(params.template get<float_type>("learning-rate", .001)),
+		rate_decay_(params.template get<float_type>("rate-decay", 1)),
 		learning_schedule_(params.template get<float_type>("learning-schedule", .001)),
 		momentum_(params.template get<float_type>("momentum", .001)),
 		l2reg_(params.template get<float_type>("l2reg", .001)) {
@@ -90,9 +92,11 @@ nnopt_results<Net> nnopt<Net>::train(Net &net, const TrainingDataset &trainset, 
 	std::size_t progress = nbatches / 80 + 1;
 
 	bool first_iteration = true;
+	float_type alpha = initial_learning_rate_;
 	for(int i = 0; i < nsteps_; i++) {
 		float_type err = 0;
-		float_type alpha = initial_learning_rate_ / (ONE + float_type(i) / learning_schedule_);
+		if(learning_schedule_ > 0)
+			alpha = alpha / (ONE + float_type(i) / learning_schedule_);
 		std::size_t batchcnt = 0;
 		std::chrono::system_clock::time_point t_epoch_start = std::chrono::system_clock::now();
 		for(auto batchit = trainset.batch_begin(batchsize_); batchit != trainset.batch_end(); ++batchit, ++batchcnt) {
@@ -160,6 +164,8 @@ nnopt_results<Net> nnopt<Net>::train(Net &net, const TrainingDataset &trainset, 
 			std::chrono::duration_cast<std::chrono::milliseconds>(t_epoch_end - t_epoch_start).count() <<
 			"ms): " << i << " (" << alpha << "): Training error: " <<
 			results.trainerr.back() << ", validation error: " << results.valerr.back() << std::endl;
+
+		alpha *= rate_decay_;
 	}
 
 	return results;
