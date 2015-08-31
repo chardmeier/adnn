@@ -387,7 +387,7 @@ struct dump_matrix {
 
 	template<class Matrix>
 	void operator()(const Matrix &mat) const {
-		os_ << "MATRIX " << mat.rows() << ' ' << mat.cols() << '\n' << mat;
+		os_ << "MATRIX " << mat.rows() << ' ' << mat.cols() << '\n' << mat << '\n';
 	}
 };
 
