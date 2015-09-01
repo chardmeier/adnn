@@ -5,6 +5,7 @@
 
 #include <chrono>
 #include <ctime>
+#include <random>
 
 namespace nnet {
 
@@ -35,6 +36,7 @@ private:
 	float_type initial_learning_rate_;
 	float_type rate_decay_;
 	float_type learning_schedule_;
+	bool rate_heuristic_;
 	float_type momentum_;
 	float_type l2reg_;
 
@@ -54,7 +56,7 @@ template<class Net>
 nnopt<Net>::nnopt(const Net &net) :
 		nsteps_(1), batchsize_(100), init_weights_(net.spec()),
 		initial_learning_rate_(.001), rate_decay_(1), learning_schedule_(20),
-		momentum_(.9), l2reg_(.001),
+		rate_heuristic_(false), momentum_(.9), l2reg_(.001),
 		output_detailed_timing_(false) {
 	init_weights_.init_normal(.01);
 }
@@ -68,6 +70,7 @@ nnopt<Net>::nnopt(const Net &net, const Params &params) :
 		initial_learning_rate_(params.template get<float_type>("learning-rate", .001)),
 		rate_decay_(params.template get<float_type>("rate-decay", 1)),
 		learning_schedule_(params.template get<float_type>("learning-schedule", .001)),
+		rate_heuristic_(params.template get<bool>("rate-heuristic", false)),
 		momentum_(params.template get<float_type>("momentum", .001)),
 		l2reg_(params.template get<float_type>("l2reg", .001)),
 		output_detailed_timing_(params.template get<bool>("output-detailed-timing", false)) {
@@ -80,6 +83,10 @@ nnopt_results<Net> nnopt<Net>::train(Net &net, const TrainingDataset &trainset, 
 	const float_type ONE = 1;
 	const float_type ZERO = 0;
 	const float_type TINY = 1e-15;
+
+	std::random_device rnddev;
+	std::default_random_engine rndeng(rnddev());
+	std::uniform_real_distribution<float_type> flip_coin(0, 1);
 
 	nnopt_results<Net> results(net);
 
@@ -97,6 +104,7 @@ nnopt_results<Net> nnopt<Net>::train(Net &net, const TrainingDataset &trainset, 
 
 	bool first_iteration = true;
 	float_type alpha = initial_learning_rate_;
+	int alphachange_steps = 0;
 	for(int i = 0; i < nsteps_; i++) {
 		float_type err = 0;
 		if(learning_schedule_ > 0)
@@ -162,6 +170,25 @@ nnopt_results<Net> nnopt<Net>::train(Net &net, const TrainingDataset &trainset, 
 			std::chrono::duration_cast<std::chrono::milliseconds>(t_epoch_end - t_epoch_start).count() <<
 			"ms): " << i << " (" << alpha << "): Training error: " <<
 			results.trainerr.back() << ", validation error: " << results.valerr.back() << std::endl;
+
+		// Learning rate adjustment heuristic that seemed to work well in old Matlab code
+		if(rate_heuristic_ && i > 6 && alphachange_steps > 5) {
+			int pos = 0;
+			for(int j = i - 6; j < i; j++)
+				if(results.trainerr[j+1] < results.trainerr[j])
+					pos++;
+			if(pos > 2) {
+				alpha *= float_type(.8);
+				std::cerr << "Decreasing learning rate to " << alpha << ".\n";
+				alphachange_steps = 0;
+			}
+			float_type prob = float_type(.3) * float_type(6 - pos) / 6;
+			if(flip_coin(rndeng) < prob) {
+				alpha *= float_type(1.05);
+				std::cerr << "Increasing learning rate to " << alpha << ".\n";
+				alphachange_steps = 0;
+			}
+		}
 
 		alpha *= rate_decay_;
 	}
