@@ -173,23 +173,25 @@ nnopt_results<Net> nnopt<Net>::train(Net &net, const TrainingDataset &trainset, 
 
 		// Learning rate adjustment heuristic that seemed to work well in old Matlab code
 		if(rate_heuristic_ && i > 6 && alphachange_steps > 5) {
-			int pos = 0;
+			int neg = 0;
 			for(int j = i - 6; j < i; j++)
-				if(results.trainerr[j+1] < results.trainerr[j])
-					pos++;
-			if(pos > 2) {
+				if(results.trainerr[j+1] > results.trainerr[j])
+					neg++;
+			if(neg > 2) {
 				alpha *= float_type(.8);
 				std::cerr << "Decreasing learning rate to " << alpha << ".\n";
 				alphachange_steps = 0;
-			}
-			float_type prob = float_type(.3) * float_type(6 - pos) / 6;
-			if(flip_coin(rndeng) < prob) {
-				alpha *= float_type(1.05);
-				std::cerr << "Increasing learning rate to " << alpha << ".\n";
-				alphachange_steps = 0;
+			} else {
+				float_type prob = float_type(.3) * float_type(6 - neg) / 6;
+				if(flip_coin(rndeng) < prob) {
+					alpha *= float_type(1.05);
+					std::cerr << "Increasing learning rate to " << alpha << ".\n";
+					alphachange_steps = 0;
+				}
 			}
 		}
 
+		alphachange_steps++;
 		alpha *= rate_decay_;
 	}
 
