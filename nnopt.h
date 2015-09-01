@@ -38,6 +38,8 @@ private:
 	float_type momentum_;
 	float_type l2reg_;
 
+	bool output_detailed_timing_;
+
 public:
 	nnopt(const Net &net);
 
@@ -52,7 +54,8 @@ template<class Net>
 nnopt<Net>::nnopt(const Net &net) :
 		nsteps_(1), batchsize_(100), init_weights_(net.spec()),
 		initial_learning_rate_(.001), rate_decay_(1), learning_schedule_(20),
-		momentum_(.9), l2reg_(.001) {
+		momentum_(.9), l2reg_(.001),
+		output_detailed_timing_(false) {
 	init_weights_.init_normal(.01);
 }
 
@@ -66,7 +69,8 @@ nnopt<Net>::nnopt(const Net &net, const Params &params) :
 		rate_decay_(params.template get<float_type>("rate-decay", 1)),
 		learning_schedule_(params.template get<float_type>("learning-schedule", .001)),
 		momentum_(params.template get<float_type>("momentum", .001)),
-		l2reg_(params.template get<float_type>("l2reg", .001)) {
+		l2reg_(params.template get<float_type>("l2reg", .001)),
+		output_detailed_timing_(params.template get<bool>("output-detailed-timing", false)) {
 	init_weights_.init_normal(params.template get<float_type>("stddev", .01));
 }
 
@@ -108,16 +112,11 @@ nnopt_results<Net> nnopt<Net>::train(Net &net, const TrainingDataset &trainset, 
 			err += net.error(output, batchit->targets()) / nbatches;
 			std::chrono::system_clock::time_point t3 = std::chrono::system_clock::now();
 			grad.array() += l2reg_ * ww.array();
-			//std::cerr << "grad.w1:\n" << grad.w1() << std::endl;
 			rms.array() = float_type(.9) * rms.array() + float_type(.1) * grad.array() * grad.array();
-			//std::cerr << "rms.w1:\n" << rms.w1() << std::endl;
 			weight_type normgrad(net.spec());
 			normgrad.array() = grad.array() / (rms.array().sqrt() + TINY);
-			//std::cerr << "normgrad.w1:\n" << normgrad.w1() << std::endl;
 			weight_change.array() = momentum_ * weight_change.array() - alpha * gain.array() * normgrad.array();
 			ww.array() += weight_change.array();
-			//std::cerr << "weight_change.w1:\n" << weight_change.w1() << std::endl;
-			//std::cerr << "- ww.w1:\n" << ww.w1() << std::endl;
 
 			if(!first_iteration) {
 				struct {
@@ -125,7 +124,6 @@ nnopt_results<Net> nnopt<Net>::train(Net &net, const TrainingDataset &trainset, 
 						return std::signbit(x);
 					}
 				} sign;
-				//auto sign = [] (const float_type &x) { return std::signbit(x); };
 				gain.array() = 
 					(grad.array().unaryExpr(sign) == prev_grad.array().unaryExpr(sign)).
 					select(gain.array() + float_type(.05), float_type(.95) * gain.array());
@@ -135,13 +133,13 @@ nnopt_results<Net> nnopt<Net>::train(Net &net, const TrainingDataset &trainset, 
 			prev_grad = grad;
 
 			std::chrono::system_clock::time_point t4 = std::chrono::system_clock::now();
-/*
-			std::cerr <<
-				"fprop: " << std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() << "us - " <<
-				"bprop: " << std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2).count() << "us - " <<
-				"sgd: " << std::chrono::duration_cast<std::chrono::microseconds>(t4 - t3).count() << "us - " <<
-				"err: " << err << std::endl;
-*/
+			if(output_detailed_timing_)
+				std::cerr <<
+					"fprop: " << std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() << "us - " <<
+					"bprop: " << std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2).count() << "us - " <<
+					"sgd: " << std::chrono::duration_cast<std::chrono::microseconds>(t4 - t3).count() << "us - " <<
+					"err: " << err << std::endl;
+
 			if(batchcnt % progress == 0 && batchcnt > 0)
 				//std::cerr << "batchcnt: " << batchcnt << std::endl; // '.';
 				std::cerr << '.';
