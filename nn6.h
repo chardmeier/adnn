@@ -68,6 +68,10 @@ public:
 		return targets_.rows();
 	}
 
+	std::size_t nclasses() const {
+		return targets_.cols();
+	}
+
 	auto subset(std::size_t from, std::size_t to) const;
 
 	const input_seq &input() const {
@@ -206,9 +210,6 @@ public:
 	}
 };
 
-//enum { CE, CELA, ELLE, ELLES, IL, ILS, ON, CA, OTHER, NCLASSES };
-enum { CE, CELA, ELLE, ELLES, IL, ILS, ON, OTHER, NCLASSES };
-
 struct vocmap {
 	typedef std::unordered_map<std::string,voc_id> map_type;
 
@@ -236,8 +237,69 @@ voc_id voc_lookup(const std::string &word, vocmap &voc, bool extend = false) {
 	return id;
 }
 
+class classmap {
+public:
+	typedef std::unordered_map<std::string,int> map_type;
+
+	classmap();
+	classmap(const std::string &file);
+
+	const map_type &map() const {
+		return map_;
+	}
+
+	int nclasses() const {
+		return nclasses_;
+	}
+
+	int other() const {
+		return nclasses_ - 1;
+	}
+
+private:
+	map_type map_;
+	int nclasses_;
+};
+
+classmap::classmap() {
+	//enum { CE, CELA, ELLE, ELLES, IL, ILS, ON, CA, OTHER, NCLASSES };
+	enum { CE, CELA, ELLE, ELLES, IL, ILS, ON, OTHER, NCLASSES };
+
+	map_.insert(std::make_pair("ce", CE));
+	map_.insert(std::make_pair("c'", CE));
+	map_.insert(std::make_pair("cela", CELA));
+	map_.insert(std::make_pair("elle", ELLE));
+	map_.insert(std::make_pair("elles", ELLES));
+	map_.insert(std::make_pair("il", IL));
+	map_.insert(std::make_pair("ils", ILS));
+	map_.insert(std::make_pair("on", ON));
+	//map_.insert(std::make_pair("ça", CA));
+	//map_.insert(std::make_pair("ca", CA));
+	//map_.insert(std::make_pair("ç'", CA));
+	map_.insert(std::make_pair("ça", CELA));
+	map_.insert(std::make_pair("ca", CELA));
+	map_.insert(std::make_pair("ç'", CELA));
+
+	nclasses_ = NCLASSES;
+}
+
+classmap::classmap(const std::string &file) : nclasses_(0) {
+	std::ifstream cls(file.c_str());
+	if(!cls.good()) {
+		std::cerr << "Error opening class map file: " << file << std::endl;
+		throw 0;
+	}
+	for(std::string line; getline(cls, line); nclasses_++) {
+		std::istringstream ss(line.c_str());
+		for(std::string pron; ss >> pron; )
+			map_.insert(std::make_pair(pron, nclasses_));
+	}
+
+	nclasses_++; // for OTHER
+}
+
 template<class Float>
-auto load_nn6(const std::string &file, vocmap &srcvocmap, vocmap &antvocmap, int nlink = -1) {
+auto load_nn6(const std::string &file, const classmap &classes, vocmap &srcvocmap, vocmap &antvocmap, int nlink = -1) {
 	typedef Eigen::SparseMatrix<Float,Eigen::RowMajor> sparse_matrix;
 	typedef Eigen::Matrix<Float,Eigen::Dynamic,Eigen::Dynamic,Eigen::RowMajor> matrix;
 	typedef Eigen::Matrix<int,Eigen::Dynamic,1> int_vector;
@@ -281,25 +343,7 @@ auto load_nn6(const std::string &file, vocmap &srcvocmap, vocmap &antvocmap, int
 	typedef Eigen::Matrix<voc_id,Eigen::Dynamic,1> vocid_vector;
 	typedef Eigen::Matrix<int,Eigen::Dynamic,1> int_vector;
 
-	typedef std::unordered_map<std::string,int> classmap_type;
-	classmap_type classmap;
-
-	classmap.insert(std::make_pair("ce", CE));
-	classmap.insert(std::make_pair("c'", CE));
-	classmap.insert(std::make_pair("cela", CELA));
-	classmap.insert(std::make_pair("elle", ELLE));
-	classmap.insert(std::make_pair("elles", ELLES));
-	classmap.insert(std::make_pair("il", IL));
-	classmap.insert(std::make_pair("ils", ILS));
-	classmap.insert(std::make_pair("on", ON));
-	//classmap.insert(std::make_pair("ça", CA));
-	//classmap.insert(std::make_pair("ca", CA));
-	//classmap.insert(std::make_pair("ç'", CA));
-	classmap.insert(std::make_pair("ça", CELA));
-	classmap.insert(std::make_pair("ca", CELA));
-	classmap.insert(std::make_pair("ç'", CELA));
-
-	matrix targets(nexmpl, static_cast<int>(NCLASSES));
+	matrix targets(nexmpl, static_cast<int>(classes.nclasses()));
 	vector nada(nexmpl);
 	matrix T(nant, nlink);
 	int_vector antmap(nexmpl);
@@ -333,14 +377,14 @@ auto load_nn6(const std::string &file, vocmap &srcvocmap, vocmap &antvocmap, int
 			bool found = false;
 			while(getline(ss, word, ' ')) {
 				boost::to_lower(word);
-				classmap_type::const_iterator it = classmap.find(word);
-				if(it != classmap.end()) {
+				classmap::map_type::const_iterator it = classes.map().find(word);
+				if(it != classes.map().end()) {
 					targets(ex, it->second)++;
 					found = true;
 				}
 			}
 			if(!found)
-				targets(ex, OTHER) = 1;
+				targets(ex, classes.other()) = 1;
 		} else if(tag == "NADA")
 			ss >> nada(ex);
 		else if(tag == "ANTECEDENT") {
@@ -403,7 +447,8 @@ auto lweights(std::size_t rows, std::size_t cols) {
 
 template<class Float,class Inputs>
 auto make_nn6(const Inputs &input,
-		std::size_t size_U, std::size_t size_antembed, std::size_t size_srcembed, std::size_t size_hidden) {
+		std::size_t size_U, std::size_t size_antembed, std::size_t size_srcembed, std::size_t size_hidden,
+		std::size_t size_output) {
 	auto ispec = nnet::data_to_spec(input);
 	int size_T = netops::at_spec<idx::I_T>(ispec).cols();
 	int size_ant = netops::at_spec<idx::I_A>(ispec).cols();
@@ -415,7 +460,7 @@ auto make_nn6(const Inputs &input,
 			lweights<Float>(size_ant, size_antembed),
 			lweights<Float>(size_src, size_srcembed),
 			lweights<Float>(7 * size_srcembed + size_antembed, size_hidden),
-			lweights<Float>(size_hidden, NCLASSES));
+			lweights<Float>(size_hidden, size_output));
 
 	typedef nnet::weights<Float,decltype(wspec)> weights;
 
