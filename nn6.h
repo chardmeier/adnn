@@ -320,9 +320,13 @@ auto load_nn6(const std::string &file, const classmap &classes, vocmap &srcvocma
 	} else
 		set_nlink = false;
 
+	std::cerr << "Loading file " << file << std::endl;
+
 	std::ifstream is(file);
-	if(!is.good())
+	if(!is.good()) {
+		std::cerr << "Can't open file." << std::endl;
 		throw 0;
+	}
 
 	std::size_t nexmpl = 0;
 	std::size_t nant = 0;
@@ -432,9 +436,9 @@ auto load_nn6(const std::string &file, const classmap &classes, vocmap &srcvocma
 	}
 
 	// if there's no OTHER, the total number of examples may be lower than the initial estimate
-	if(ex < nexmpl) {
+	if(ex + 1 < nexmpl) {
+		nexmpl = ex + 1;
 		std::cerr << "Loaded: " << nexmpl << " examples, " << nant << " antecedents.\n";
-		nexmpl = ex;
 		nada.conservativeResize(nexmpl);
 		antmap.conservativeResize(nexmpl);
 		targets.conservativeResize(nexmpl, Eigen::NoChange);
