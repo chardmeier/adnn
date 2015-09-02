@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
 	std::size_t size_srcembed = params.get<std::size_t>("nn6.layers.srcembed");
 	std::size_t size_hidden = params.get<std::size_t>("nn6.layers.hidden");
 
-	nn6::classmap classmap(params.get<std::string>("nn6.classmap"));
+	nn6::classmap classmap(params.get<std::string>("nn6.classmap"), params.get<bool>("nn6.with-other", true));
 	nn6::vocmap srcvocmap;
 	nn6::vocmap antvocmap;
 	auto train = nn6::load_nn6<double>(train_nn6, classmap, srcvocmap, antvocmap);

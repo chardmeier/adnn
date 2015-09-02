@@ -252,6 +252,10 @@ public:
 		return nclasses_;
 	}
 
+	bool with_other() const {
+		return with_other_;
+	}
+
 	int other() const {
 		return nclasses_ - 1;
 	}
@@ -259,6 +263,7 @@ public:
 private:
 	map_type map_;
 	int nclasses_;
+	bool with_other_;
 };
 
 classmap::classmap() {
@@ -281,9 +286,10 @@ classmap::classmap() {
 	map_.insert(std::make_pair("ç'", CELA));
 
 	nclasses_ = NCLASSES;
+	with_other_ = true;
 }
 
-classmap::classmap(const std::string &file, bool with_other) : nclasses_(0) {
+classmap::classmap(const std::string &file, bool with_other) : nclasses_(0), with_other_(with_other) {
 	std::ifstream cls(file.c_str());
 	if(!cls.good()) {
 		std::cerr << "Error opening class map file: " << file << std::endl;
@@ -302,7 +308,7 @@ classmap::classmap(const std::string &file, bool with_other) : nclasses_(0) {
 template<class Float>
 auto load_nn6(const std::string &file, const classmap &classes, vocmap &srcvocmap, vocmap &antvocmap, int nlink = -1) {
 	typedef Eigen::SparseMatrix<Float,Eigen::RowMajor> sparse_matrix;
-	typedef Eigen::Matrix<Float,Eigen::Dynamic,Eigen::Dynamic,Eigen::RowMajor> matrix;
+	typedef Eigen::Matrix<Float,Eigen::Dynamic,Eigen::Dynamic,Eigen::RowMajor> matrix; // must be row-major because of resizing!
 	typedef Eigen::Matrix<int,Eigen::Dynamic,1> int_vector;
 
 	bool make_vocabulary = srcvocmap.map.size() <= 1;
@@ -356,8 +362,10 @@ auto load_nn6(const std::string &file, const classmap &classes, vocmap &srcvocma
 	antmap.setZero();
 	targets.setZero();
 
-	for(std::size_t i = 0, ex = std::numeric_limits<std::size_t>::max(), ant = std::numeric_limits<std::size_t>::max();
-			i < nn6_lines.size(); i++) {
+	bool skip_example = false;
+
+	std::size_t ex = std::numeric_limits<std::size_t>::max();
+	for(std::size_t i = 0, ant = std::numeric_limits<std::size_t>::max(); i < nn6_lines.size(); i++) {
 		std::istringstream ss(nn6_lines[i]);
 		std::string tag;
 		getline(ss, tag, ' ');
@@ -365,6 +373,7 @@ auto load_nn6(const std::string &file, const classmap &classes, vocmap &srcvocma
 			if(ex < nexmpl)
 				antmap(ex) = ant + 1;
 
+			skip_example = false;
 			ex++; // wraps around to zero at first example
 			std::string word;
 			for(int j = 0; j < 7; j++) {
@@ -384,26 +393,49 @@ auto load_nn6(const std::string &file, const classmap &classes, vocmap &srcvocma
 					found = true;
 				}
 			}
-			if(!found)
-				targets(ex, classes.other()) = 1;
-		} else if(tag == "NADA")
-			ss >> nada(ex);
-		else if(tag == "ANTECEDENT") {
-			ant++; // wraps around to zero at first antecedent
-			int nwords = std::count(nn6_lines[i].begin(), nn6_lines[i].end(), ' ');
-			std::string word;
-			while(getline(ss, word, ' ')) {
-				voc_id v = voc_lookup(word, antvocmap, make_vocabulary);
-				ant_triplets.push_back(Eigen::Triplet<Float>(ant, v, 1.0 / nwords));
+			if(!found) {
+				if(classes.with_other())
+					targets(ex, classes.other()) = 1;
+				else {
+					skip_example = true;
+					// undo everything done by the ANAPHORA branch
+					ex--;
+					for(int j = 0; j < 7; j++)
+						srcctx_triplets[j].pop_back();
+				}
 			}
-		} else if(tag == "-1") {
-			int fidx;
-			char colon;
-			Float fval;
-			while(ss >> fidx >> colon >> fval)
-				if(fidx <= nlink)
-					T(ant, fidx - 1) = fval;
+		} else {
+			if(!skip_example) {
+				if(tag == "NADA")
+					ss >> nada(ex);
+				else if(tag == "ANTECEDENT") {
+					ant++; // wraps around to zero at first antecedent
+					int nwords = std::count(nn6_lines[i].begin(), nn6_lines[i].end(), ' ');
+					std::string word;
+					while(getline(ss, word, ' ')) {
+						voc_id v = voc_lookup(word, antvocmap, make_vocabulary);
+						ant_triplets.push_back(Eigen::Triplet<Float>(ant, v, 1.0 / nwords));
+					}
+				} else if(tag == "-1") {
+					int fidx;
+					char colon;
+					Float fval;
+					while(ss >> fidx >> colon >> fval)
+						if(fidx <= nlink)
+							T(ant, fidx - 1) = fval;
+				}
+			} else if(tag == "ANTECEDENT")
+				nant--; // subtract skipped antecedents from total count
 		}
+	}
+
+	// if there's no OTHER, the total number of examples may be lower than the initial estimate
+	if(ex < nexmpl) {
+		nexmpl = ex;
+		nada.conservativeResize(nexmpl);
+		antmap.conservativeResize(nexmpl);
+		targets.conservativeResize(nexmpl, Eigen::NoChange);
+		T.conservativeResize(nant, Eigen::NoChange);
 	}
 
 	targets.array().colwise() /= targets.array().rowwise().sum();
