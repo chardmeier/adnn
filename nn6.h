@@ -242,7 +242,7 @@ public:
 	typedef std::unordered_map<std::string,int> map_type;
 
 	classmap();
-	classmap(const std::string &file);
+	classmap(const std::string &file, bool with_other);
 
 	const map_type &map() const {
 		return map_;
@@ -283,7 +283,7 @@ classmap::classmap() {
 	nclasses_ = NCLASSES;
 }
 
-classmap::classmap(const std::string &file) : nclasses_(0) {
+classmap::classmap(const std::string &file, bool with_other) : nclasses_(0) {
 	std::ifstream cls(file.c_str());
 	if(!cls.good()) {
 		std::cerr << "Error opening class map file: " << file << std::endl;
@@ -295,7 +295,8 @@ classmap::classmap(const std::string &file) : nclasses_(0) {
 			map_.insert(std::make_pair(pron, nclasses_));
 	}
 
-	nclasses_++; // for OTHER
+	if(with_other)
+		nclasses_++;
 }
 
 template<class Float>
@@ -364,7 +365,7 @@ auto load_nn6(const std::string &file, const classmap &classes, vocmap &srcvocma
 			if(ex < nexmpl)
 				antmap(ex) = ant + 1;
 
-			ex++;
+			ex++; // wraps around to zero at first example
 			std::string word;
 			for(int j = 0; j < 7; j++) {
 				getline(ss, word, ' ');
@@ -388,7 +389,7 @@ auto load_nn6(const std::string &file, const classmap &classes, vocmap &srcvocma
 		} else if(tag == "NADA")
 			ss >> nada(ex);
 		else if(tag == "ANTECEDENT") {
-			ant++;
+			ant++; // wraps around to zero at first antecedent
 			int nwords = std::count(nn6_lines[i].begin(), nn6_lines[i].end(), ' ');
 			std::string word;
 			while(getline(ss, word, ' ')) {
