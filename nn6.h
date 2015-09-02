@@ -343,7 +343,7 @@ auto load_nn6(const std::string &file, const classmap &classes, vocmap &srcvocma
 	typedef Eigen::Matrix<voc_id,Eigen::Dynamic,1> vocid_vector;
 	typedef Eigen::Matrix<int,Eigen::Dynamic,1> int_vector;
 
-	matrix targets(nexmpl, static_cast<int>(classes.nclasses()));
+	matrix targets(nexmpl, classes.nclasses());
 	vector nada(nexmpl);
 	matrix T(nant, nlink);
 	int_vector antmap(nexmpl);
