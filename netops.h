@@ -5,6 +5,7 @@
 #include <cmath>
 #include <limits>
 #include <memory>
+#include <random>
 #include <type_traits>
 
 #include <boost/fusion/include/at.hpp>
@@ -626,6 +627,47 @@ private:
 	mask_matrix maxmask_;
 };
 
+template<class A>
+class dropout {
+public:
+	typedef typename A::F F;
+	enum {
+		RowsAtCompileTime = Eigen::Dynamic,
+		ColsAtCompileTime = A::ColsAtCompileTime,
+		StorageOrder = A::StorageOrder
+	};
+
+	dropout(expression_ptr<derived_ptr<A>> &&a) :
+		a_(std::move(a).transfer_cast()), prob_(.5),
+		rndeng_(std::random_device()) {}
+
+	template<class Input,class Weights,class Fn>
+	auto operator()(const Input &input, const Weights &weights, Fn &&f) {
+		return a_(input, weights, [this] (auto &&i, auto &&w, auto &&a) {
+			this->mask_ = a.unaryExpr([this] (F x) {
+				return this->flip();
+			});
+			return this->mask_.cwiseProduct(a);
+		});
+	}
+
+	template<class Derived,class Input,class Weights,class Grads>
+	void bprop(const Eigen::MatrixBase<Derived> &in, const Input &input, const Weights &weights, Grads &gradients) const {
+		a_.bprop(mask_.cwiseProduct(in), input, weights, gradients);
+	}
+
+private:
+	F flip() {
+		std::uniform_real_distribution<F> dist(0, 1);
+		return dist(rndeng_) < prob_ ? F(1) : F(0);
+	}
+
+	derived_ptr<A> a_;
+	F prob_;
+	std::default_random_engine rndeng_;
+	Eigen::Matrix<F,RowsAtCompileTime,ColsAtCompileTime,StorageOrder> mask_;
+};
+
 } // namespace expr
 
 /*
@@ -688,6 +730,12 @@ template<class MapIdx,class A>
 derived_ptr<expr::max_pooling<MapIdx,A>>
 max_pooling(expression_ptr<derived_ptr<A>> &&a) {
 	return std::make_unique<expr::max_pooling<MapIdx,A>>(std::move(a).transfer_cast());
+}
+
+template<class MapIdx,class A>
+derived_ptr<expr::dropout<MapIdx,A>>
+dropout(expression_ptr<derived_ptr<A>> &&a) {
+	return std::make_unique<expr::dropout<MapIdx,A>>(std::move(a).transfer_cast());
 }
 
 /*
