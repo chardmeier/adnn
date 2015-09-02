@@ -50,7 +50,9 @@ int main(int argc, char **argv) {
 	auto testset = nn6::load_nn6<double>(test_nn6, classmap, srcvocmap, antvocmap, train.nlink());
 	std::cerr << "Data loaded." << std::endl;
 
-	auto net = nn6::make_nn6<double>(train.input(), size_U, size_antembed, size_srcembed, size_hidden, train.nclasses());
+	auto net = nn6::make_nn6<double>(train.input(),
+		size_U, size_antembed, size_srcembed, size_hidden, train.nclasses(),
+		params.get<double>("nn6.dropout-src", 1.0));
 	typedef decltype(net) net_type;
 
 	nnet::nnopt<net_type> opt(net, params.get_child("nn6.nnopt"));

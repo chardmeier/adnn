@@ -488,7 +488,7 @@ auto lweights(std::size_t rows, std::size_t cols) {
 template<class Float,class Inputs>
 auto make_nn6(const Inputs &input,
 		std::size_t size_U, std::size_t size_antembed, std::size_t size_srcembed, std::size_t size_hidden,
-		std::size_t size_output) {
+		std::size_t size_output, Float dropout_src) {
 	auto ispec = nnet::data_to_spec(input);
 	int size_T = netops::at_spec<idx::I_T>(ispec).cols();
 	int size_ant = netops::at_spec<idx::I_A>(ispec).cols();
@@ -508,13 +508,13 @@ auto make_nn6(const Inputs &input,
 	auto &&net = softmax_crossentropy(linear_layer<idx::W_hidout>(wspec,
 			logistic_sigmoid(linear_layer<idx::W_embhid>(wspec,
 				logistic_sigmoid(concat(
-					linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_L3>(ispec)),
-					linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_L2>(ispec)),
-					linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_L1>(ispec)),
-					linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_P>(ispec)),
-					linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_R1>(ispec)),
-					linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_R2>(ispec)),
-					linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_R3>(ispec)),
+					dropout(dropout_src, linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_L3>(ispec))),
+					dropout(dropout_src, linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_L2>(ispec))),
+					dropout(dropout_src, linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_L1>(ispec))),
+					dropout(dropout_src, linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_P>(ispec))),
+					dropout(dropout_src, linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_R1>(ispec))),
+					dropout(dropout_src, linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_R2>(ispec))),
+					dropout(dropout_src, linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_R3>(ispec))),
 					nn6_combiner<idx::I_antmap>(
 						linear_layer<idx::W_antembed>(wspec, input_matrix<idx::I_A>(ispec)),
 						logistic_sigmoid(linear_layer<idx::W_V>(wspec,

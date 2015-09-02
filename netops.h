@@ -637,17 +637,17 @@ public:
 		StorageOrder = A::StorageOrder
 	};
 
-	dropout(expression_ptr<derived_ptr<A>> &&a) :
-		a_(std::move(a).transfer_cast()), prob_(.5),
-		rndeng_(std::random_device()) {}
+	dropout(F prob, expression_ptr<derived_ptr<A>> &&a) :
+		a_(std::move(a).transfer_cast()), prob_(prob),
+		rndeng_(rnddev_()) {}
 
 	template<class Input,class Weights,class Fn>
 	auto operator()(const Input &input, const Weights &weights, Fn &&f) {
-		return a_(input, weights, [this] (auto &&i, auto &&w, auto &&a) {
+		return a_(input, weights, [this, &f] (auto &&i, auto &&w, auto &&a) {
 			this->mask_ = a.unaryExpr([this] (F x) {
 				return this->flip();
 			});
-			return this->mask_.cwiseProduct(a);
+			return std::forward<Fn>(f)(std::forward<decltype(i)>(i), std::forward<decltype(w)>(w), this->mask_.cwiseProduct(a));
 		});
 	}
 
@@ -664,6 +664,7 @@ private:
 
 	derived_ptr<A> a_;
 	F prob_;
+	std::random_device rnddev_;
 	std::default_random_engine rndeng_;
 	Eigen::Matrix<F,RowsAtCompileTime,ColsAtCompileTime,StorageOrder> mask_;
 };
@@ -732,10 +733,10 @@ max_pooling(expression_ptr<derived_ptr<A>> &&a) {
 	return std::make_unique<expr::max_pooling<MapIdx,A>>(std::move(a).transfer_cast());
 }
 
-template<class MapIdx,class A>
-derived_ptr<expr::dropout<MapIdx,A>>
-dropout(expression_ptr<derived_ptr<A>> &&a) {
-	return std::make_unique<expr::dropout<MapIdx,A>>(std::move(a).transfer_cast());
+template<class A>
+derived_ptr<expr::dropout<A>>
+dropout(typename A::F prob, expression_ptr<derived_ptr<A>> &&a) {
+	return std::make_unique<expr::dropout<A>>(prob, std::move(a).transfer_cast());
 }
 
 /*
