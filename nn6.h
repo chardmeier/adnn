@@ -364,6 +364,8 @@ auto load_nn6(const std::string &file, const classmap &classes, vocmap &srcvocma
 
 	bool skip_example = false;
 
+	std::cerr << "In input file: " << nexmpl << " examples, " << nant << " antecedents.\n";
+
 	std::size_t ex = std::numeric_limits<std::size_t>::max();
 	for(std::size_t i = 0, ant = std::numeric_limits<std::size_t>::max(); i < nn6_lines.size(); i++) {
 		std::istringstream ss(nn6_lines[i]);
@@ -431,6 +433,7 @@ auto load_nn6(const std::string &file, const classmap &classes, vocmap &srcvocma
 
 	// if there's no OTHER, the total number of examples may be lower than the initial estimate
 	if(ex < nexmpl) {
+		std::cerr << "Loaded: " << nexmpl << " examples, " << nant << " antecedents.\n";
 		nexmpl = ex;
 		nada.conservativeResize(nexmpl);
 		antmap.conservativeResize(nexmpl);
