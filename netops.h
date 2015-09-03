@@ -632,7 +632,7 @@ class dropout {
 public:
 	typedef typename A::F F;
 	enum {
-		RowsAtCompileTime = Eigen::Dynamic,
+		RowsAtCompileTime = A::RowsAtCompileTime,
 		ColsAtCompileTime = A::ColsAtCompileTime,
 		StorageOrder = A::StorageOrder
 	};
