@@ -185,7 +185,7 @@ class weights;
 namespace detail {
 
 constexpr std::size_t align_round(std::size_t size) {
-	const std::size_t ALIGNMENT = 32; // alignment in bytes (a power of two)
+	const std::size_t ALIGNMENT = 32; // alignment in number of floats (a power of two)
 
 	const std::size_t MASK = ALIGNMENT - 1;
 	if((size & MASK) == 0)
