@@ -33,6 +33,11 @@ typedef unsigned long voc_id;
 
 namespace detail {
 
+template<bool TrainingMode>
+struct nn6_mode : public nnet::config_data<nn6_mode<TrainingMode>> {
+	typedef mpl::bool_<TrainingMode> training_mode;
+};
+
 template<class Dataset> class batch_iterator;
 
 } // namespace detail
@@ -164,6 +169,7 @@ namespace idx {
 	typedef mpl::vector2_c<int,0,1> I_T;
 	typedef mpl::vector2_c<int,0,2> I_antmap;
 
+	typedef mpl::vector1_c<int,1> I_srcctx;
 	typedef mpl::vector2_c<int,1,0> I_L3;
 	typedef mpl::vector2_c<int,1,1> I_L2;
 	typedef mpl::vector2_c<int,1,2> I_L1;
@@ -171,6 +177,8 @@ namespace idx {
 	typedef mpl::vector2_c<int,1,4> I_R1;
 	typedef mpl::vector2_c<int,1,5> I_R2;
 	typedef mpl::vector2_c<int,1,6> I_R3;
+
+	typedef mpl::vector1_c<int,2> I_mode;
 
 	typedef mpl::vector1_c<int,0> W_U;
 	typedef mpl::vector1_c<int,1> W_V;
@@ -305,7 +313,7 @@ classmap::classmap(const std::string &file, bool with_other) : nclasses_(0), wit
 		nclasses_++;
 }
 
-template<class Float>
+template<class Float,bool TrainingMode>
 auto load_nn6(const std::string &file, const classmap &classes, vocmap &srcvocmap, vocmap &antvocmap, int nlink = -1) {
 	typedef Eigen::SparseMatrix<Float,Eigen::RowMajor> sparse_matrix;
 	typedef Eigen::Matrix<Float,Eigen::Dynamic,Eigen::Dynamic,Eigen::RowMajor> matrix; // must be row-major because of resizing!
@@ -475,7 +483,8 @@ auto load_nn6(const std::string &file, const classmap &classes, vocmap &srcvocma
 
 	return make_nn6_dataset(nlink,
 		fusion::make_vector(fusion::make_vector(A, T, antmap),
-			boost::array<wordinput_type,7>({ L3, L2, L1, P, R1, R2, R3 })),
+			boost::array<wordinput_type,7>({ L3, L2, L1, P, R1, R2, R3 }),
+			detail::nn6_mode<TrainingMode>()),
 		std::move(targets));
 }
 
@@ -508,13 +517,13 @@ auto make_nn6(const Inputs &input,
 	auto &&net = softmax_crossentropy(linear_layer<idx::W_hidout>(wspec,
 			logistic_sigmoid(linear_layer<idx::W_embhid>(wspec,
 				logistic_sigmoid(concat(
-					dropout(dropout_src, linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_L3>(ispec))),
-					dropout(dropout_src, linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_L2>(ispec))),
-					dropout(dropout_src, linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_L1>(ispec))),
-					dropout(dropout_src, linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_P>(ispec))),
-					dropout(dropout_src, linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_R1>(ispec))),
-					dropout(dropout_src, linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_R2>(ispec))),
-					dropout(dropout_src, linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_R3>(ispec))),
+					dropout<idx::I_mode>(dropout_src, linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_L3>(ispec))),
+					dropout<idx::I_mode>(dropout_src, linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_L2>(ispec))),
+					dropout<idx::I_mode>(dropout_src, linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_L1>(ispec))),
+					dropout<idx::I_mode>(dropout_src, linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_P>(ispec))),
+					dropout<idx::I_mode>(dropout_src, linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_R1>(ispec))),
+					dropout<idx::I_mode>(dropout_src, linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_R2>(ispec))),
+					dropout<idx::I_mode>(dropout_src, linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_R3>(ispec))),
 					nn6_combiner<idx::I_antmap>(
 						linear_layer<idx::W_antembed>(wspec, input_matrix<idx::I_A>(ispec)),
 						logistic_sigmoid(linear_layer<idx::W_V>(wspec,
@@ -542,7 +551,8 @@ auto nn6_dataset<InputSeq,Targets>::subset(std::size_t from, std::size_t to) con
 	const auto &A = netops::at_spec<idx::I_A>(input_);
 	const auto &T = netops::at_spec<idx::I_T>(input_);
 	const auto &antmap = netops::at_spec<idx::I_antmap>(input_);
-	const auto &srcctx = fusion::back(input_);
+	const auto &srcctx = netops::at_spec<idx::I_srcctx>(input_);
+	const auto &mode = netops::at_spec<idx::I_mode>(input_);
 	int nexmpl = std::min(to, nitems()) - from;
 	int from_ant = antmap.head(from).sum();
 	int n_ant = antmap.middleRows(from, nexmpl).sum();
@@ -550,7 +560,8 @@ auto nn6_dataset<InputSeq,Targets>::subset(std::size_t from, std::size_t to) con
 		fusion::make_vector(
 			fusion::make_vector(A.middleRows(from_ant, n_ant).eval(), T.middleRows(from_ant, n_ant).eval(),
 				antmap.middleRows(from, nexmpl).eval()),
-			fusion::as_vector(fusion::transform(srcctx, [from, nexmpl] (const auto &m) { return m.middleRows(from, nexmpl).eval(); }))),
+			fusion::as_vector(fusion::transform(srcctx, [from, nexmpl] (const auto &m) { return m.middleRows(from, nexmpl).eval(); })),
+			mode),
 		targets_.middleRows(from, nexmpl).eval());
 }
 

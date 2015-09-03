@@ -179,6 +179,11 @@ private:
 	std::size_t cols_;
 };
 
+// For configuration data that isn't a matrix.
+// rows(), cols() and size() will just fail on this type of data.
+template<class Derived>
+struct config_data : public spec<config_data<Derived>> {};
+
 template<class FF,class Spec,class Array = std_array<FF> >
 class weights;
 
@@ -398,6 +403,8 @@ struct data_to_spec {
 	auto operator()(const Eigen::EigenBase<Derived> &m, std::enable_if_t<Derived::RowsAtCompileTime == 1>* = nullptr) const;
 	template<class Derived>
 	auto operator()(const Eigen::EigenBase<Derived> &m, std::enable_if_t<Derived::RowsAtCompileTime != 1>* = nullptr) const;
+	template<class Derived>
+	auto operator()(const config_data<Derived> &d) const;
 };
 
 template<class Data>
@@ -415,6 +422,11 @@ template<class Derived>
 auto data_to_spec::operator()(const Eigen::EigenBase<Derived> &m, std::enable_if_t<Derived::RowsAtCompileTime != 1>*) const {
 	constexpr int storage_order = Derived::IsRowMajor ? Eigen::RowMajor : Eigen::ColMajor;
 	return mat_size<typename Derived::Scalar,storage_order>(m.rows(), m.cols());
+}
+
+template<class Derived>
+auto data_to_spec::operator()(const config_data<Derived> &d) const {
+	return d;
 }
 
 } // namespace detail

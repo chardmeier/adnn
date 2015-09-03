@@ -627,7 +627,7 @@ private:
 	mask_matrix maxmask_;
 };
 
-template<class A>
+template<class ModeIdx,class A>
 class dropout {
 public:
 	typedef typename A::F F;
@@ -642,12 +642,21 @@ public:
 		rndeng_(rnddev_()) {}
 
 	template<class Input,class Weights,class Fn>
-	auto operator()(const Input &input, const Weights &weights, Fn &&f) {
+	auto operator()(const Input &input, const Weights &weights, Fn &&f,
+			std::enable_if_t<std::remove_reference<decltype(at_spec<ModeIdx>(std::declval<Input>()))>::type::training_mode::value>* = nullptr) {
 		return a_(input, weights, [this, &f] (auto &&i, auto &&w, auto &&a) {
 			this->mask_ = a.unaryExpr([this] (F x) {
 				return this->flip();
 			});
 			return std::forward<Fn>(f)(std::forward<decltype(i)>(i), std::forward<decltype(w)>(w), this->mask_.cwiseProduct(a));
+		});
+	}
+
+	template<class Input,class Weights,class Fn>
+	auto operator()(const Input &input, const Weights &weights, Fn &&f,
+			std::enable_if_t<!std::remove_reference<decltype(at_spec<ModeIdx>(std::declval<Input>()))>::type::training_mode::value>* = nullptr) {
+		return a_(input, weights, [this, &f] (auto &&i, auto &&w, auto &&a) {
+			return std::forward<Fn>(f)(std::forward<decltype(i)>(i), std::forward<decltype(w)>(w), this->prob_ * a);
 		});
 	}
 
@@ -733,10 +742,10 @@ max_pooling(expression_ptr<derived_ptr<A>> &&a) {
 	return std::make_unique<expr::max_pooling<MapIdx,A>>(std::move(a).transfer_cast());
 }
 
-template<class A>
-derived_ptr<expr::dropout<A>>
+template<class ModeIdx,class A>
+derived_ptr<expr::dropout<ModeIdx,A>>
 dropout(typename A::F prob, expression_ptr<derived_ptr<A>> &&a) {
-	return std::make_unique<expr::dropout<A>>(prob, std::move(a).transfer_cast());
+	return std::make_unique<expr::dropout<ModeIdx,A>>(prob, std::move(a).transfer_cast());
 }
 
 /*

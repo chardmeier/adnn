@@ -45,9 +45,9 @@ int main(int argc, char **argv) {
 	nn6::classmap classmap(params.get<std::string>("nn6.classmap"), params.get<bool>("nn6.with-other", true));
 	nn6::vocmap srcvocmap;
 	nn6::vocmap antvocmap;
-	auto train = nn6::load_nn6<double>(train_nn6, classmap, srcvocmap, antvocmap);
-	auto val = nn6::load_nn6<double>(val_nn6, classmap, srcvocmap, antvocmap, train.nlink());
-	auto testset = nn6::load_nn6<double>(test_nn6, classmap, srcvocmap, antvocmap, train.nlink());
+	auto train = nn6::load_nn6<double,true>(train_nn6, classmap, srcvocmap, antvocmap);
+	auto val = nn6::load_nn6<double,false>(val_nn6, classmap, srcvocmap, antvocmap, train.nlink());
+	auto testset = nn6::load_nn6<double,false>(test_nn6, classmap, srcvocmap, antvocmap, train.nlink());
 	std::cerr << "Data loaded." << std::endl;
 
 	auto net = nn6::make_nn6<double>(train.input(),
