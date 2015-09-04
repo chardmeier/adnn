@@ -7,6 +7,7 @@
 #include <sstream>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 #include <boost/algorithm/string/case_conv.hpp>
 #include <boost/array.hpp>
@@ -221,11 +222,13 @@ public:
 struct vocmap {
 	typedef std::unordered_map<std::string,voc_id> map_type;
 
+	enum { UNKNOWN_WORD = 0 };
+
 	voc_id maxid;
 	map_type map;
 
 	vocmap() : maxid(1) {
-		map.insert(std::make_pair("<unk>", 0));
+		map.insert(std::make_pair("<unk>", UNKNOWN_WORD));
 	}
 };
 
@@ -239,7 +242,7 @@ voc_id voc_lookup(const std::string &word, vocmap &voc, bool extend = false) {
 			id = voc.maxid++;
 			voc.map.insert(std::make_pair(word, id));
 		} else
-			id = 0;
+			id = vocmap::UNKNOWN_WORD;
 	}
 
 	return id;
@@ -313,13 +316,52 @@ classmap::classmap(const std::string &file, bool with_other) : nclasses_(0), wit
 		nclasses_++;
 }
 
+class tagmap {
+public:
+	typedef std::unordered_set<std::string> tagset_type;
+
+private:
+	typedef std::unordered_map<std::string,tagset_type> map_type;
+	map_type map_;
+
+public:
+	tagmap() {}
+	tagmap(const std::string &file);
+
+	const tagset_type &lookup(const std::string &word) const {
+		static const tagset_type EMPTY_TAGSET;
+		map_type::const_iterator it = map_.find(word);
+		if(it != map_.end())
+			return it->second;
+		else
+			return EMPTY_TAGSET;
+	}
+};
+
+tagmap::tagmap(const std::string &file) {
+	std::ifstream tss(file.c_str());
+	if(!tss.good()) {
+		std::cerr << "Error opening tagset file: " << file << std::endl;
+		throw 0;
+	}
+	for(std::string line; getline(tss, line); ) {
+		std::istringstream ss(line.c_str());
+		std::string word;
+		if(ss >> word) {
+			tagset_type tagset;
+			std::string tag;
+			while(ss >> tag)
+				tagset.insert(tag);
+			map_.insert(std::make_pair(word, tagset));
+		}
+	}
+}
+
 template<class Float,bool TrainingMode>
-auto load_nn6(const std::string &file, const classmap &classes, vocmap &srcvocmap, vocmap &antvocmap, int nlink = -1) {
+auto load_nn6(const std::string &file, const classmap &classes, vocmap &srcvocmap, vocmap &antvocmap, const tagmap &tags, int nlink = -1) {
 	typedef Eigen::SparseMatrix<Float,Eigen::RowMajor> sparse_matrix;
 	typedef Eigen::Matrix<Float,Eigen::Dynamic,Eigen::Dynamic,Eigen::RowMajor> matrix; // must be row-major because of resizing!
 	typedef Eigen::Matrix<int,Eigen::Dynamic,1> int_vector;
-
-	bool make_vocabulary = srcvocmap.map.size() <= 1;
 
 	bool set_nlink;
 	if(nlink < 0) {
@@ -379,7 +421,8 @@ auto load_nn6(const std::string &file, const classmap &classes, vocmap &srcvocma
 	std::cerr << "In input file: " << nexmpl << " examples, " << nant << " antecedents.\n";
 
 	std::size_t ex = std::numeric_limits<std::size_t>::max();
-	for(std::size_t i = 0, ant = std::numeric_limits<std::size_t>::max(); i < nn6_lines.size(); i++) {
+	std::size_t ant = std::numeric_limits<std::size_t>::max();
+	for(std::size_t i = 0; i < nn6_lines.size(); i++) {
 		std::istringstream ss(nn6_lines[i]);
 		std::string tag;
 		getline(ss, tag, ' ');
@@ -392,7 +435,7 @@ auto load_nn6(const std::string &file, const classmap &classes, vocmap &srcvocma
 			std::string word;
 			for(int j = 0; j < 7; j++) {
 				getline(ss, word, ' ');
-				voc_id v = voc_lookup(word, srcvocmap, make_vocabulary);
+				voc_id v = voc_lookup(word, srcvocmap, TrainingMode);
 				srcctx_triplets[j].push_back(Eigen::Triplet<Float>(ex, v, 1));
 			}
 			ant = std::numeric_limits<std::size_t>::max();
@@ -427,8 +470,15 @@ auto load_nn6(const std::string &file, const classmap &classes, vocmap &srcvocma
 					int nwords = std::count(nn6_lines[i].begin(), nn6_lines[i].end(), ' ');
 					std::string word;
 					while(getline(ss, word, ' ')) {
-						voc_id v = voc_lookup(word, antvocmap, make_vocabulary);
+						voc_id v = voc_lookup(word, antvocmap, TrainingMode);
 						ant_triplets.push_back(Eigen::Triplet<Float>(ant, v, 1.0 / nwords));
+						const tagmap::tagset_type &tagset = tags.lookup(word);
+						for(const std::string &t : tagset) {
+							const std::string PREFIX("lefff:");
+							v = voc_lookup(PREFIX + t, antvocmap, TrainingMode);
+							if(v != vocmap::UNKNOWN_WORD)
+								ant_triplets.push_back(Eigen::Triplet<Float>(ant, v, 1.0 / nwords));
+						}
 					}
 				} else if(tag == "-1") {
 					int fidx;
@@ -516,15 +566,16 @@ auto make_nn6(const Inputs &input,
 	using namespace netops;
 	auto &&net = softmax_crossentropy(linear_layer<idx::W_hidout>(wspec,
 			logistic_sigmoid(linear_layer<idx::W_embhid>(wspec,
-				logistic_sigmoid(concat(
-					unscaled_dropout<idx::I_mode>(dropout_src, linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_L3>(ispec))),
-					unscaled_dropout<idx::I_mode>(dropout_src, linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_L2>(ispec))),
-					unscaled_dropout<idx::I_mode>(dropout_src, linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_L1>(ispec))),
-					unscaled_dropout<idx::I_mode>(dropout_src, linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_P>(ispec))),
-					unscaled_dropout<idx::I_mode>(dropout_src, linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_R1>(ispec))),
-					unscaled_dropout<idx::I_mode>(dropout_src, linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_R2>(ispec))),
-					unscaled_dropout<idx::I_mode>(dropout_src, linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_R3>(ispec))),
-					nn6_combiner<idx::I_antmap>(
+				concat(
+					unscaled_dropout<idx::I_mode>(dropout_src, logistic_sigmoid(concat(
+						linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_L3>(ispec)),
+						linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_L2>(ispec)),
+						linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_L1>(ispec)),
+						linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_P>(ispec)),
+						linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_R1>(ispec)),
+						linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_R2>(ispec)),
+						linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_R3>(ispec))))),
+					sample(nn6_combiner<idx::I_antmap>(
 						linear_layer<idx::W_antembed>(wspec, input_matrix<idx::I_A>(ispec)),
 						logistic_sigmoid(linear_layer<idx::W_V>(wspec,
 							logistic_sigmoid(linear_layer<idx::W_U>(wspec,

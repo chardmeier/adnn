@@ -43,11 +43,12 @@ int main(int argc, char **argv) {
 	std::size_t size_hidden = params.get<std::size_t>("nn6.layers.hidden");
 
 	nn6::classmap classmap(params.get<std::string>("nn6.classmap"), params.get<bool>("nn6.with-other", true));
+	nn6::tagmap tagmap(params.get<std::string>("nn6.tagmap", "/dev/null"));
 	nn6::vocmap srcvocmap;
 	nn6::vocmap antvocmap;
-	auto train = nn6::load_nn6<double,true>(train_nn6, classmap, srcvocmap, antvocmap);
-	auto val = nn6::load_nn6<double,false>(val_nn6, classmap, srcvocmap, antvocmap, train.nlink());
-	auto testset = nn6::load_nn6<double,false>(test_nn6, classmap, srcvocmap, antvocmap, train.nlink());
+	auto train = nn6::load_nn6<double,true>(train_nn6, classmap, srcvocmap, antvocmap, tagmap);
+	auto val = nn6::load_nn6<double,false>(val_nn6, classmap, srcvocmap, antvocmap, tagmap, train.nlink());
+	auto testset = nn6::load_nn6<double,false>(test_nn6, classmap, srcvocmap, antvocmap, tagmap, train.nlink());
 	std::cerr << "Data loaded." << std::endl;
 
 	auto net = nn6::make_nn6<double>(train.input(),
