@@ -493,6 +493,9 @@ auto load_nn6(const std::string &file, const classmap &classes, vocmap &srcvocma
 		}
 	}
 
+	// set number of antecedent candidates for last example
+	antmap(ex) = ant + 1;
+
 	// if there's no OTHER, the total number of examples may be lower than the initial estimate
 	if(ex + 1 < nexmpl) {
 		nexmpl = ex + 1;
