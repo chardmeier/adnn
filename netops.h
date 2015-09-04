@@ -681,6 +681,42 @@ private:
 	Eigen::Matrix<F,RowsAtCompileTime,ColsAtCompileTime,StorageOrder> mask_;
 };
 
+template<class A>
+class sample {
+public:
+	typedef typename A::F F;
+	enum {
+		RowsAtCompileTime = A::RowsAtCompileTime,
+		ColsAtCompileTime = A::ColsAtCompileTime,
+		StorageOrder = A::StorageOrder
+	};
+
+	sample(expression_ptr<derived_ptr<A>> &&a) :
+		a_(std::move(a).transfer_cast()),
+		rndeng_(rnddev_()) {}
+
+	template<class Input,class Weights,class Fn>
+	auto operator()(const Input &input, const Weights &weights, Fn &&f) {
+		return a_(input, weights, [this, &f] (auto &&i, auto &&w, auto &&a) {
+			return std::forward<Fn>(f)(std::forward<decltype(i)>(i), std::forward<decltype(w)>(w),
+				a.unaryExpr([this] (F x) {
+					std::uniform_real_distribution<F> dist(0, 1);
+					return dist(this->rndeng_) < x ? F(1) : F(0);
+				}));
+		});
+	}
+
+	template<class Derived,class Input,class Weights,class Grads>
+	void bprop(const Eigen::MatrixBase<Derived> &in, const Input &input, const Weights &weights, Grads &gradients) const {
+		a_.bprop(in, input, weights, gradients);
+	}
+
+private:
+	derived_ptr<A> a_;
+	std::random_device rnddev_;
+	std::default_random_engine rndeng_;
+};
+
 } // namespace expr
 
 /*
@@ -755,6 +791,12 @@ template<class ModeIdx,class A>
 derived_ptr<expr::dropout<false,ModeIdx,A>>
 unscaled_dropout(typename A::F prob, expression_ptr<derived_ptr<A>> &&a) {
 	return std::make_unique<expr::dropout<false,ModeIdx,A>>(prob, std::move(a).transfer_cast());
+}
+
+template<class A>
+derived_ptr<expr::sample<A>>
+sample(expression_ptr<derived_ptr<A>> &&a) {
+	return std::make_unique<expr::sample<A>>(std::move(a).transfer_cast());
 }
 
 /*
