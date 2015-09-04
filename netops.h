@@ -627,7 +627,7 @@ private:
 	mask_matrix maxmask_;
 };
 
-template<class ModeIdx,class A>
+template<bool ScaleOutput,class ModeIdx,class A>
 class dropout {
 public:
 	typedef typename A::F F;
@@ -656,7 +656,10 @@ public:
 	auto operator()(const Input &input, const Weights &weights, Fn &&f,
 			std::enable_if_t<!std::remove_reference<decltype(at_spec<ModeIdx>(std::declval<Input>()))>::type::training_mode::value>* = nullptr) {
 		return a_(input, weights, [this, &f] (auto &&i, auto &&w, auto &&a) {
-			return std::forward<Fn>(f)(std::forward<decltype(i)>(i), std::forward<decltype(w)>(w), this->prob_ * a);
+			if(ScaleOutput)
+				return std::forward<Fn>(f)(std::forward<decltype(i)>(i), std::forward<decltype(w)>(w), this->prob_ * a);
+			else
+				return std::forward<Fn>(f)(std::forward<decltype(i)>(i), std::forward<decltype(w)>(w), a);
 		});
 	}
 
@@ -743,9 +746,15 @@ max_pooling(expression_ptr<derived_ptr<A>> &&a) {
 }
 
 template<class ModeIdx,class A>
-derived_ptr<expr::dropout<ModeIdx,A>>
+derived_ptr<expr::dropout<true,ModeIdx,A>>
 dropout(typename A::F prob, expression_ptr<derived_ptr<A>> &&a) {
-	return std::make_unique<expr::dropout<ModeIdx,A>>(prob, std::move(a).transfer_cast());
+	return std::make_unique<expr::dropout<true,ModeIdx,A>>(prob, std::move(a).transfer_cast());
+}
+
+template<class ModeIdx,class A>
+derived_ptr<expr::dropout<false,ModeIdx,A>>
+unscaled_dropout(typename A::F prob, expression_ptr<derived_ptr<A>> &&a) {
+	return std::make_unique<expr::dropout<false,ModeIdx,A>>(prob, std::move(a).transfer_cast());
 }
 
 /*
