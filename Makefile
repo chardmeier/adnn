@@ -28,6 +28,9 @@ NNET_HEADERS = nnet.h net_wrapper.h nnopt.h mlp.h logbilinear_lm.h nn6.h
 nn6: nn6.cc netops.h $(NNET_HEADERS)
 	$(CXX) $(CXX_FLAGS) $(OPT) $(MKL) -o nn6 -g -I$(BOOST) -I$(EIGEN) nn6.cc -lm
 
+nn6-cmp: nn6-cmp.cc netops.h $(NNET_HEADERS)
+	$(CXX) $(CXX_FLAGS) $(OPT) $(MKL) -o nn6-cmp -g -I$(BOOST) -I$(EIGEN) nn6-cmp.cc -lm
+
 nn6_gradient_check: nn6_gradient_check.cc netops.h $(NNET_HEADERS)
 	$(CXX) $(CXX_FLAGS) $(OPT) $(MKL) -o nn6_gradient_check -g -I$(BOOST) -I$(EIGEN) nn6_gradient_check.cc -lm
 
