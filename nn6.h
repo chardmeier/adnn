@@ -422,7 +422,7 @@ auto load_nn6(const std::string &file, const classmap &classes, vocmap &srcvocma
 
 	std::size_t ex = std::numeric_limits<std::size_t>::max();
 	std::size_t ant = std::numeric_limits<std::size_t>::max();
-	std::size_t total_ant = 0;
+	std::size_t total_ant = std::numeric_limits<std::size_t>::max();
 	for(std::size_t i = 0; i < nn6_lines.size(); i++) {
 		std::istringstream ss(nn6_lines[i]);
 		std::string tag;
@@ -467,18 +467,19 @@ auto load_nn6(const std::string &file, const classmap &classes, vocmap &srcvocma
 				if(tag == "NADA")
 					ss >> nada(ex);
 				else if(tag == "ANTECEDENT") {
-					ant++; // wraps around to zero at first antecedent
+					total_ant++; // wraps around to zero at first antecedent in file
+					ant++; // wraps around to zero at first antecedent per example
 					int nwords = std::count(nn6_lines[i].begin(), nn6_lines[i].end(), ' ');
 					std::string word;
 					while(getline(ss, word, ' ')) {
 						voc_id v = voc_lookup(word, antvocmap, TrainingMode);
-						ant_triplets.push_back(Eigen::Triplet<Float>(ant, v, 1.0 / nwords));
+						ant_triplets.push_back(Eigen::Triplet<Float>(total_ant, v, 1.0 / nwords));
 						const tagmap::tagset_type &tagset = tags.lookup(word);
 						for(const std::string &t : tagset) {
 							const std::string PREFIX("lefff:");
 							v = voc_lookup(PREFIX + t, antvocmap, TrainingMode);
 							if(v != vocmap::UNKNOWN_WORD)
-								ant_triplets.push_back(Eigen::Triplet<Float>(ant, v, 1.0 / nwords));
+								ant_triplets.push_back(Eigen::Triplet<Float>(total_ant, v, 1.0 / nwords));
 						}
 					}
 				} else if(tag == "-1") {
@@ -488,7 +489,6 @@ auto load_nn6(const std::string &file, const classmap &classes, vocmap &srcvocma
 					while(ss >> fidx >> colon >> fval)
 						if(fidx <= nlink)
 							T(total_ant, fidx - 1) = fval;
-					total_ant++;
 				}
 			} else if(tag == "ANTECEDENT")
 				nant--; // subtract skipped antecedents from total count
