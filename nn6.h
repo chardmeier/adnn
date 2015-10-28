@@ -422,6 +422,7 @@ auto load_nn6(const std::string &file, const classmap &classes, vocmap &srcvocma
 
 	std::size_t ex = std::numeric_limits<std::size_t>::max();
 	std::size_t ant = std::numeric_limits<std::size_t>::max();
+	std::size_t total_ant = 0;
 	for(std::size_t i = 0; i < nn6_lines.size(); i++) {
 		std::istringstream ss(nn6_lines[i]);
 		std::string tag;
@@ -486,7 +487,8 @@ auto load_nn6(const std::string &file, const classmap &classes, vocmap &srcvocma
 					Float fval;
 					while(ss >> fidx >> colon >> fval)
 						if(fidx <= nlink)
-							T(ant, fidx - 1) = fval;
+							T(total_ant, fidx - 1) = fval;
+					total_ant++;
 				}
 			} else if(tag == "ANTECEDENT")
 				nant--; // subtract skipped antecedents from total count
@@ -539,6 +541,77 @@ auto load_nn6(const std::string &file, const classmap &classes, vocmap &srcvocma
 			boost::array<wordinput_type,7>({ L3, L2, L1, P, R1, R2, R3 }),
 			detail::nn6_mode<TrainingMode>()),
 		std::move(targets));
+}
+
+template<class Dataset>
+void dump_nn6_dataset(const std::string &outstem, const Dataset &dataset, const vocmap &srcvocmap, const vocmap &antvocmap) {
+	Eigen::IOFormat dense_format(4, Eigen::DontAlignCols, " ", "\n", "", "", "", "\n");
+
+	// srcvoc
+	std::size_t srcvocsize = srcvocmap.map.size();
+	std::vector<std::string> voc(srcvocsize);
+	for(vocmap::map_type::const_iterator it = srcvocmap.map.begin(); it != srcvocmap.map.end(); ++it)
+		voc[it->second] = it->first;
+	std::ofstream srcvoc_os((outstem + ".srcvoc").c_str());
+	for(std::size_t i = 0; i < srcvocsize; i++)
+		srcvoc_os << voc[i] << '\n';
+	srcvoc_os.close();
+	
+	// tgtvoc
+	std::size_t antvocsize = antvocmap.map.size();
+	voc.resize(antvocsize);
+	for(vocmap::map_type::const_iterator it = antvocmap.map.begin(); it != antvocmap.map.end(); ++it)
+		voc[it->second] = it->first;
+	std::ofstream antvoc_os((outstem + ".tgtvoc").c_str());
+	for(std::size_t i = 0; i < antvocsize; i++)
+		antvoc_os << voc[i] << '\n';
+	antvoc_os.close();
+	
+	// srcfeat
+	std::ofstream srcfeat_os((outstem + ".srcfeat").c_str());
+	const auto &src_array = netops::at_spec<idx::I_srcctx>(dataset.sequence());
+	typedef typename std::remove_reference<decltype(src_array)>::type::value_type wordinput_type;
+	for(std::size_t i = 0; i < dataset.nitems(); i++)
+		for(std::size_t j = 0, voc_offset = 0; j < src_array.size(); j++, voc_offset += srcvocsize)
+			for(typename wordinput_type::InnerIterator it(src_array[j], i); it; ++it)
+				srcfeat_os << (i + 1) << ' ' << (it.col() + voc_offset) << ' ' << it.value() << '\n';
+	srcfeat_os.close();
+
+	// antfeat
+	std::ofstream antfeat_os((outstem + ".antfeat").c_str());
+	const auto &A = netops::at_spec<idx::I_A>(dataset.sequence());
+	for(int i = 0; i < A.rows(); i++)
+		for(typename wordinput_type::InnerIterator it(A, i); it; ++it)
+			antfeat_os << (i + 1) << ' ' << it.col() << ' ' << it.value() << '\n';
+	antfeat_os.close();
+
+	// targets
+	std::ofstream targets_os((outstem + ".targets").c_str());
+	targets_os << dataset.targets().format(dense_format);
+	targets_os.close();
+	
+	// antmap
+	std::ofstream antmap_os((outstem + ".antmap").c_str());
+	const auto &antmap = netops::at_spec<idx::I_antmap>(dataset.sequence());
+	for(std::size_t i = 0; i < dataset.nitems(); i++)
+		for(int j = 0; j < antmap(i); j++)
+			antmap_os << (i + 1) << '\n';
+	antmap_os.close();
+	
+	// linkfeat
+	std::ofstream linkfeat_os((outstem + ".linkfeat").c_str());
+	const auto &T = netops::at_spec<idx::I_T>(dataset.sequence());
+	for(int i = 0; i < T.rows(); i++)
+		for(int j = 0; j < T.cols(); j++)
+			if(T(i,j) != 0)
+				linkfeat_os << (i+1) << ' ' << (j+1) << ' ' << T(i,j) << '\n';
+	linkfeat_os.close();
+	
+	// nada
+	std::ofstream nada_os((outstem + ".nada").c_str());
+	//const auto &nada = netops::at_spec<idx::I_nada>(dataset.sequence());
+	nada_os << Eigen::VectorXd::Zero(dataset.nitems()).format(dense_format);
+	nada_os.close();
 }
 
 template<class Float>
