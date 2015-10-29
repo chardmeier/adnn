@@ -19,8 +19,9 @@ void join_and_dump(const Seq &sequence, const char *outfile) {
 	const auto &bias = netops::at_spec<BIdx>(sequence);
 	Eigen::MatrixXd concat(weights.rows() + 1, weights.cols());
 	concat << bias, weights;
+	Eigen::IOFormat dense_format(Eigen::FullPrecision, Eigen::DontAlignCols, " ", "\n", "", "", "", "\n");
 	std::ofstream os(outfile);
-	os << concat << '\n';
+	os << concat.format(dense_format);
 }
 
 template<class Weights>
