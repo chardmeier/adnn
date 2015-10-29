@@ -68,7 +68,7 @@ int main(int argc, char **argv) {
 	auto output = net(ww, dataset.sequence());
 
 	std::ofstream output_os("output");
-	output_os << output;
+	output_os << output << '\n';
 
 	return 0;
 }
