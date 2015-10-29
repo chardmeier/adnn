@@ -301,6 +301,53 @@ private:
 };
 
 template<class A,class B>
+class concat2 {
+public:
+	typedef typename A::F F;
+	enum {
+		RowsAtCompileTime = A::RowsAtCompileTime,
+		ColsAtCompileTime = Eigen::Dynamic,
+		StorageOrder = A::StorageOrder
+	};
+
+private:
+	typedef Eigen::Matrix<F,RowsAtCompileTime,ColsAtCompileTime,StorageOrder> matrix_type;
+
+public:
+	concat2(expression_ptr<derived_ptr<A>> && a, expression_ptr<derived_ptr<B>> && b) :
+		a_(std::move(a).transfer_cast()), b_(std::move(b).transfer_cast()) {}
+
+	template<class Input,class Weights,class Fn>
+	auto operator()(const Input &input, const Weights &weights, Fn &&f) {
+		std::size_t nrows;
+		a_(input, weights, [this, &nrows] (auto &&i, auto &&w, auto &&a) { nrows = a.rows(); this->acols_ = a.cols(); });
+		b_(input, weights, [this] (auto &&i, auto &&w, auto &&b) { this->bcols_ += b.cols(); });
+		concat_.resize(nrows, acols_ + bcols_);
+		a_(input, weights, [this] (auto &&i, auto &&w, auto &&a) {
+			this->concat_.leftCols(a.cols()) = std::forward<decltype(a)>(a);
+		});
+		b_(input, weights, [this] (auto &&i, auto &&w, auto &&b) {
+			this->concat_.rightCols(b.cols()) = std::forward<decltype(b)>(b);
+		});
+		return std::forward<Fn>(f)(input, weights, concat_);
+	}
+
+	template<class Derived,class Input,class Weights,class Grads>
+	void bprop(const Eigen::MatrixBase<Derived> &in, const Input &input, const Weights &weights, Grads &gradients) const {
+		const auto &eval_in = in.eval();
+		a_.bprop(eval_in.leftCols(acols_), input, weights, gradients);
+		b_.bprop(eval_in.rightCols(bcols_), input, weights, gradients);
+	}
+
+private:
+	derived_ptr<A> a_;
+	derived_ptr<B> b_;
+	std::size_t acols_;
+	std::size_t bcols_;
+	matrix_type concat_;
+};
+
+template<class A,class B>
 class rowwise_add {
 public:
 	typedef typename A::F F;
@@ -739,10 +786,18 @@ weight_matrix(const Spec &spec) {
 	return std::make_unique<expr::weight_matrix<Index,Spec>>();
 }
 
-template<class... Args>
-derived_ptr<expr::concat<Args...>>
-concat(expression_ptr<derived_ptr<Args>> &&... args) {
-	return std::make_unique<expr::concat<Args...>>(std::move(args).transfer_cast()...);
+template<class A,class B>
+derived_ptr<expr::concat2<A,B>>
+concat(expression_ptr<derived_ptr<A>> &&a, expression_ptr<derived_ptr<B>> &&b) {
+	return std::make_unique<expr::concat2<A,B>>(std::move(a).transfer_cast(), std::move(b).transfer_cast());
+}
+
+template<class A,class B,class C,class... Args>
+derived_ptr<expr::concat<A,B,C,Args...>>
+concat(expression_ptr<derived_ptr<A>> &&a, expression_ptr<derived_ptr<B>> &&b,
+		expression_ptr<derived_ptr<C>> &&c, expression_ptr<derived_ptr<Args>> &&... args) {
+	return std::make_unique<expr::concat<A,B,C,Args...>>(std::move(a).transfer_cast(),
+		std::move(b).transfer_cast(), std::move(c).transfer_cast(), std::move(args).transfer_cast()...);
 }
 
 template<class A,class B>
