@@ -635,15 +635,16 @@ auto make_nn6(const Inputs &input,
 			lweights<Float>(size_U, 1),
 			lweights<Float>(size_ant, size_antembed),
 			lweights<Float>(size_src, size_srcembed),
-			lweights<Float>(7 * size_srcembed + size_antembed, size_hidden),
-			lweights<Float>(size_hidden, size_output));
+			lweights<Float>(7 * size_srcembed + size_antembed + 1, size_hidden),
+			lweights<Float>(size_hidden + 1, size_output - 1));
 
 	typedef nnet::weights<Float,decltype(wspec)> weights;
 
 	using namespace netops;
-	auto &&net = softmax_crossentropy(concat(input_matrix<idx::I_nada>(ispec), linear_layer<idx::W_hidout>(wspec,
-			concat(input_matrix<idx::I_nada>(ispec), logistic_sigmoid(linear_layer<idx::W_embhid>(wspec,
-				concat(
+	auto &&net = softmax_crossentropy(concat_zero(linear_layer<idx::W_hidout>(wspec,
+			concat(input_matrix<idx::I_nada>(ispec),
+				logistic_sigmoid(linear_layer<idx::W_embhid>(wspec, concat(
+					input_matrix<idx::I_nada>(ispec),
 					unscaled_dropout<idx::I_mode>(dropout_src, logistic_sigmoid(concat(
 						linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_L3>(ispec)),
 						linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_L2>(ispec)),
