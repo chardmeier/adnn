@@ -546,7 +546,7 @@ auto load_nn6(const std::string &file, const classmap &classes, vocmap &srcvocma
 
 template<class Dataset>
 void dump_nn6_dataset(const std::string &outstem, const Dataset &dataset, const vocmap &srcvocmap, const vocmap &antvocmap) {
-	Eigen::IOFormat dense_format(4, Eigen::DontAlignCols, " ", "\n", "", "", "", "\n");
+	Eigen::IOFormat dense_format(Eigen::FullPrecision, Eigen::DontAlignCols, " ", "\n", "", "", "", "\n");
 
 	// srcvoc
 	std::size_t srcvocsize = srcvocmap.map.size();
