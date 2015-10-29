@@ -61,7 +61,7 @@ int main(int argc, char **argv) {
 	typedef decltype(net) net_type;
 
 	net_type::weight_type ww(net.spec());
-	ww.init_normal(.4);
+	ww.init_normal(.04);
 
 	dump_weights(ww);
 
