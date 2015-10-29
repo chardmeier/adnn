@@ -169,6 +169,7 @@ namespace idx {
 	typedef mpl::vector2_c<int,0,0> I_A;
 	typedef mpl::vector2_c<int,0,1> I_T;
 	typedef mpl::vector2_c<int,0,2> I_antmap;
+	typedef mpl::vector2_c<int,0,3> I_nada;
 
 	typedef mpl::vector1_c<int,1> I_srcctx;
 	typedef mpl::vector2_c<int,1,0> I_L3;
@@ -537,7 +538,7 @@ auto load_nn6(const std::string &file, const classmap &classes, vocmap &srcvocma
 	R3.setFromTriplets(srcctx_triplets[6].begin(), srcctx_triplets[6].end());
 
 	return make_nn6_dataset(nlink,
-		fusion::make_vector(fusion::make_vector(A, T, antmap),
+		fusion::make_vector(fusion::make_vector(A, T, antmap, nada),
 			boost::array<wordinput_type,7>({ L3, L2, L1, P, R1, R2, R3 }),
 			detail::nn6_mode<TrainingMode>()),
 		std::move(targets));
@@ -609,8 +610,8 @@ void dump_nn6_dataset(const std::string &outstem, const Dataset &dataset, const 
 	
 	// nada
 	std::ofstream nada_os((outstem + ".nada").c_str());
-	//const auto &nada = netops::at_spec<idx::I_nada>(dataset.sequence());
-	nada_os << Eigen::VectorXd::Zero(dataset.nitems()).format(dense_format);
+	const auto &nada = netops::at_spec<idx::I_nada>(dataset.sequence());
+	nada_os << nada.format(dense_format);
 	nada_os.close();
 }
 
@@ -640,8 +641,8 @@ auto make_nn6(const Inputs &input,
 	typedef nnet::weights<Float,decltype(wspec)> weights;
 
 	using namespace netops;
-	auto &&net = softmax_crossentropy(linear_layer<idx::W_hidout>(wspec,
-			logistic_sigmoid(linear_layer<idx::W_embhid>(wspec,
+	auto &&net = softmax_crossentropy(concat(input_matrix<idx::I_nada>(ispec), linear_layer<idx::W_hidout>(wspec,
+			concat(input_matrix<idx::I_nada>(ispec), logistic_sigmoid(linear_layer<idx::W_embhid>(wspec,
 				concat(
 					unscaled_dropout<idx::I_mode>(dropout_src, logistic_sigmoid(concat(
 						linear_layer<idx::W_srcembed>(wspec, input_matrix<idx::I_L3>(ispec)),
@@ -655,7 +656,7 @@ auto make_nn6(const Inputs &input,
 						linear_layer<idx::W_antembed>(wspec, input_matrix<idx::I_A>(ispec)),
 						logistic_sigmoid(linear_layer<idx::W_V>(wspec,
 							logistic_sigmoid(linear_layer<idx::W_U>(wspec,
-								input_matrix<idx::I_T>(ispec))))))))))));
+								input_matrix<idx::I_T>(ispec))))))))))))));
 
 	typedef typename std::remove_reference<decltype(net)>::type::expr_type net_type;
 	return nn6<Float,decltype(wspec),net_type>(std::move(wspec), std::move(net));

@@ -5,7 +5,7 @@ OPT = -O3 -march=native -ffast-math # -fopenmp
 #CXX_FLAGS = -std=c++14 -DBOOST_RESULT_OF_USE_DECLTYPE -Wall -Wno-comment
 
 CXX = g++
-CXX_FLAGS = -std=c++14 -ftemplate-backtrace-limit=0 -Wall -Wno-unused-local-typedefs -Wno-deprecated-declarations
+CXX_FLAGS = -std=c++14 -ftemplate-backtrace-limit=0 -Wall -Wno-unused-local-typedefs -Wno-deprecated-declarations -Wno-return-type
 
 #ADEPT_FLAGS = -DADEPT_INITIAL_STACK_LENGTH=2000000000 
 ADEPT_FLAGS = -DADEPT_INITIAL_STACK_LENGTH=100000
