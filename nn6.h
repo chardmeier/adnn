@@ -166,6 +166,8 @@ auto make_nn6_dataset(int nlink, InputSeq &&input, Targets &&targets) {
 }
 
 namespace idx {
+	// The indices here must be consistent with load_nn6 and nn6_dataset::subset.
+
 	typedef mpl::vector2_c<int,0,0> I_A;
 	typedef mpl::vector2_c<int,0,1> I_T;
 	typedef mpl::vector2_c<int,0,2> I_antmap;
@@ -680,6 +682,7 @@ auto nn6_dataset<InputSeq,Targets>::subset(std::size_t from, std::size_t to) con
 	const auto &A = netops::at_spec<idx::I_A>(input_);
 	const auto &T = netops::at_spec<idx::I_T>(input_);
 	const auto &antmap = netops::at_spec<idx::I_antmap>(input_);
+	const auto &nada = netops::at_spec<idx::I_nada>(input_);
 	const auto &srcctx = netops::at_spec<idx::I_srcctx>(input_);
 	const auto &mode = netops::at_spec<idx::I_mode>(input_);
 	int nexmpl = std::min(to, nitems()) - from;
@@ -688,7 +691,7 @@ auto nn6_dataset<InputSeq,Targets>::subset(std::size_t from, std::size_t to) con
 	return make_nn6_dataset(nlink_,
 		fusion::make_vector(
 			fusion::make_vector(A.middleRows(from_ant, n_ant).eval(), T.middleRows(from_ant, n_ant).eval(),
-				antmap.middleRows(from, nexmpl).eval()),
+				antmap.middleRows(from, nexmpl).eval(), nada.middleRows(from, nexmpl).eval()),
 			fusion::as_vector(fusion::transform(srcctx, [from, nexmpl] (const auto &m) { return m.middleRows(from, nexmpl).eval(); })),
 			mode),
 		targets_.middleRows(from, nexmpl).eval());
