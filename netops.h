@@ -300,6 +300,8 @@ private:
 	matrix_type concat_;
 };
 
+// For some reason, specialising concat for the 2-argument case saves substantial amounts of
+// memory at compile time.
 template<class A,class B>
 class concat2 {
 public:
