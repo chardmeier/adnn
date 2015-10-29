@@ -349,6 +349,44 @@ private:
 	matrix_type concat_;
 };
 
+// add a single column of zeros (for softmax)
+template<class A>
+class concat_zero {
+public:
+	typedef typename A::F F;
+	enum {
+		RowsAtCompileTime = A::RowsAtCompileTime,
+		ColsAtCompileTime = A::ColsAtCompileTime == Eigen::Dynamic ? Eigen::Dynamic : A::ColsAtCompileTime + 1,
+		StorageOrder = A::StorageOrder
+	};
+
+private:
+	typedef Eigen::Matrix<F,RowsAtCompileTime,ColsAtCompileTime,StorageOrder> matrix_type;
+
+public:
+	concat_zero(expression_ptr<derived_ptr<A>> && a) :
+		a_(std::move(a).transfer_cast()) {}
+
+	template<class Input,class Weights,class Fn>
+	auto operator()(const Input &input, const Weights &weights, Fn &&f) {
+		a_(input, weights, [this] (auto &&i, auto &&w, auto &&a) {
+			this->concat_.resize(a.rows(), a.cols() + 1);
+			this->concat_.leftCols(a.cols()) = std::forward<decltype(a)>(a);
+			this->concat_.rightCols(1).setZero();
+		});
+		return std::forward<Fn>(f)(input, weights, concat_);
+	}
+
+	template<class Derived,class Input,class Weights,class Grads>
+	void bprop(const Eigen::MatrixBase<Derived> &in, const Input &input, const Weights &weights, Grads &gradients) const {
+		a_.bprop(in.leftCols(in.cols() - 1), input, weights, gradients);
+	}
+
+private:
+	derived_ptr<A> a_;
+	matrix_type concat_;
+};
+
 template<class A,class B>
 class rowwise_add {
 public:
@@ -800,6 +838,12 @@ concat(expression_ptr<derived_ptr<A>> &&a, expression_ptr<derived_ptr<B>> &&b,
 		expression_ptr<derived_ptr<C>> &&c, expression_ptr<derived_ptr<Args>> &&... args) {
 	return std::make_unique<expr::concat<A,B,C,Args...>>(std::move(a).transfer_cast(),
 		std::move(b).transfer_cast(), std::move(c).transfer_cast(), std::move(args).transfer_cast()...);
+}
+
+template<class A>
+derived_ptr<expr::concat_zero<A>>
+concat_zero(expression_ptr<derived_ptr<A>> &&a) {
+	return std::make_unique<expr::concat_zero<A>>(std::move(a).transfer_cast());
 }
 
 template<class A,class B>
