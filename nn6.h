@@ -575,7 +575,7 @@ void dump_nn6_dataset(const std::string &outstem, const Dataset &dataset, const 
 	const auto &src_array = netops::at_spec<idx::I_srcctx>(dataset.sequence());
 	typedef typename std::remove_reference<decltype(src_array)>::type::value_type wordinput_type;
 	for(std::size_t i = 0; i < dataset.nitems(); i++)
-		for(std::size_t j = 0, voc_offset = 0; j < src_array.size(); j++, voc_offset += srcvocsize)
+		for(std::size_t j = 0, voc_offset = 1; j < src_array.size(); j++, voc_offset += srcvocsize)
 			for(typename wordinput_type::InnerIterator it(src_array[j], i); it; ++it)
 				srcfeat_os << (i + 1) << ' ' << (it.col() + voc_offset) << ' ' << it.value() << '\n';
 	srcfeat_os.close();
@@ -585,7 +585,7 @@ void dump_nn6_dataset(const std::string &outstem, const Dataset &dataset, const 
 	const auto &A = netops::at_spec<idx::I_A>(dataset.sequence());
 	for(int i = 0; i < A.rows(); i++)
 		for(typename wordinput_type::InnerIterator it(A, i); it; ++it)
-			antfeat_os << (i + 1) << ' ' << it.col() << ' ' << it.value() << '\n';
+			antfeat_os << (i + 1) << ' ' << (it.col() + 1) << ' ' << it.value() << '\n';
 	antfeat_os.close();
 
 	// targets
