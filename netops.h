@@ -323,7 +323,7 @@ public:
 	auto operator()(const Input &input, const Weights &weights, Fn &&f) {
 		std::size_t nrows;
 		a_(input, weights, [this, &nrows] (auto &&i, auto &&w, auto &&a) { nrows = a.rows(); this->acols_ = a.cols(); });
-		b_(input, weights, [this] (auto &&i, auto &&w, auto &&b) { this->bcols_ += b.cols(); });
+		b_(input, weights, [this] (auto &&i, auto &&w, auto &&b) { this->bcols_ = b.cols(); });
 		concat_.resize(nrows, acols_ + bcols_);
 		a_(input, weights, [this] (auto &&i, auto &&w, auto &&a) {
 			this->concat_.leftCols(a.cols()) = std::forward<decltype(a)>(a);
