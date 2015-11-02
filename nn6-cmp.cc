@@ -35,12 +35,14 @@ void dump_weights(const Weights &ww) {
 }
 
 int main(int argc, char **argv) {
-	if(argc != 2) {
-		std::cerr << "Usage: nn6 input.nn6" << std::endl;
+	if(argc != 4) {
+		std::cerr << "Usage: nn6 train.nn6 val.nn6 test.nn6" << std::endl;
 		return 1;
 	}
 
-	std::string datafile = argv[1];
+	std::string train_nn6 = argv[1];
+	std::string val_nn6 = argv[2];
+	std::string test_nn6 = argv[3];
 
 	std::size_t size_U = 20;
 	std::size_t size_antembed = 20;
@@ -51,13 +53,17 @@ int main(int argc, char **argv) {
 	nn6::tagmap tagmap("/usit/abel/u1/chm/WMT2013.en-fr/pronoun-model/lefff-2.1.utf8.tags");
 	nn6::vocmap srcvocmap;
 	nn6::vocmap antvocmap;
-	auto dataset = nn6::load_nn6<double,true>(datafile, classmap, srcvocmap, antvocmap, tagmap);
+	auto train = nn6::load_nn6<double,true>(train_nn6, classmap, srcvocmap, antvocmap, tagmap);
+	auto val = nn6::load_nn6<double,false>(val_nn6, classmap, srcvocmap, antvocmap, tagmap, train.nlink());
+	auto testset = nn6::load_nn6<double,false>(test_nn6, classmap, srcvocmap, antvocmap, tagmap, train.nlink());
 	std::cerr << "Data loaded." << std::endl;
 
-	nn6::dump_nn6_dataset("dump", dataset, srcvocmap, antvocmap);
+	nn6::dump_nn6_dataset("dump-train", train, srcvocmap, antvocmap);
+	nn6::dump_nn6_dataset("dump-val", val, srcvocmap, antvocmap);
+	nn6::dump_nn6_dataset("dump-test", testset, srcvocmap, antvocmap);
 
-	auto net = nn6::make_nn6<double>(dataset.input(),
-		size_U, size_antembed, size_srcembed, size_hidden, dataset.nclasses(),
+	auto net = nn6::make_nn6<double>(train.input(),
+		size_U, size_antembed, size_srcembed, size_hidden, train.nclasses(),
 		1.0);
 	typedef decltype(net) net_type;
 
@@ -66,7 +72,7 @@ int main(int argc, char **argv) {
 
 	dump_weights(ww);
 
-	auto output = net(ww, dataset.sequence());
+	auto output = net(ww, train.sequence());
 
 	std::ofstream output_os("output");
 	output_os << output << '\n';
