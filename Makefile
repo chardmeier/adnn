@@ -11,7 +11,7 @@ CXX_FLAGS = -std=c++14 -ftemplate-backtrace-limit=0 -Wall -Wno-unused-local-type
 ADEPT_FLAGS = -DADEPT_INITIAL_STACK_LENGTH=100000
 
 #MKL = 
-#MKL = -DEIGEN_MKL_USE_ALL -Wl,--start-group ${MKLROOT}/lib/intel64/libmkl_intel_ilp64.a \
+MKL = -DEIGEN_MKL_USE_ALL -Wl,--start-group ${MKLROOT}/lib/intel64/libmkl_intel_ilp64.a \
 	${MKLROOT}/lib/intel64/libmkl_core.a ${MKLROOT}/lib/intel64/libmkl_intel_thread.a -Wl,--end-group \
 	-liomp5 -ldl -lpthread -lm \
 	-DMKL_ILP64 -m64 -I${MKLROOT}/include
@@ -23,7 +23,10 @@ BOOST = $(HOME)/boost_1_57_0
 ADEPT = $(HOME)/adept-1.0
 EIGEN = $(HOME)/eigen-3.2.4 
 
-NNET_HEADERS = nnet.h net_wrapper.h nnopt.h mlp.h logbilinear_lm.h nn6.h
+NNET_HEADERS = nnet.h net_wrapper.h nnopt.h mlp.h logbilinear_lm.h nn6.h nn6-dev.h
+
+nn6-dev: nn6-dev.cc netops.h $(NNET_HEADERS)
+	$(CXX) $(CXX_FLAGS) $(OPT) $(MKL) -o nn6-dev -g -I$(BOOST) -I$(EIGEN) nn6-dev.cc -lm
 
 nn6: nn6.cc netops.h $(NNET_HEADERS)
 	$(CXX) $(CXX_FLAGS) $(OPT) $(MKL) -o nn6 -g -I$(BOOST) -I$(EIGEN) nn6.cc -lm
