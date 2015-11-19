@@ -421,6 +421,40 @@ private:
 	derived_ptr<B> b_;
 };
 
+template <class A,class B>
+class matrix_add {
+public:
+	typedef typename A::F F;
+	enum {
+		RowsAtCompileTime = A::RowsAtCompileTime,
+		ColsAtCompileTime = A::ColsAtCompileTime,
+		StorageOrder = A::StorageOrder
+	};
+
+	matrix_add(expression_ptr<derived_ptr<A>> &&a, expression_ptr<derived_ptr<B>> &&b) :
+		a_(std::move(a).transfer_cast()), b_(std::move(b).transfer_cast()) {}
+
+	template<class Input,class Weights,class Fn>
+	auto operator()(const Input &input, const Weights &weights, Fn &&f) {
+		return detail::binary_cont(a_, b_, input, weights,
+			[&f] (auto &&i, auto &&w, auto &&a, auto &&b) {
+				return f(std::forward<decltype(i)>(i), std::forward<decltype(w)>(w),
+					std::forward<decltype(a)>(a) + std::forward<decltype(b)>(b));
+		});
+	}
+
+	template<class Derived,class Input,class Weights,class Grads>
+	void bprop(const Eigen::MatrixBase<Derived> &in, const Input &input, const Weights &weights, Grads &gradients) const {
+		const auto &eval_in = in.eval();
+		a_.bprop(eval_in, input, weights, gradients);
+		b_.bprop(eval_in, input, weights, gradients);
+	}
+
+private:
+	derived_ptr<A> a_;
+	derived_ptr<B> b_;
+};
+
 template<class A,class B>
 class matmul {
 public:
@@ -850,6 +884,12 @@ template<class A,class B>
 std::enable_if_t<B::RowsAtCompileTime==1,derived_ptr<expr::rowwise_add<A,B>>>
 operator+(expression_ptr<derived_ptr<A>> &&a, expression_ptr<derived_ptr<B>> &&b) {
 	return std::make_unique<expr::rowwise_add<A,B>>(std::move(a).transfer_cast(), std::move(b).transfer_cast());
+}
+
+template<class A,class B>
+std::enable_if_t<B::RowsAtCompileTime!=1,derived_ptr<expr::matrix_add<A,B>>>
+operator+(expression_ptr<derived_ptr<A>> &&a, expression_ptr<derived_ptr<B>> &&b) {
+	return std::make_unique<expr::matrix_add<A,B>>(std::move(a).transfer_cast(), std::move(b).transfer_cast());
 }
 
 template<class A,class B>
