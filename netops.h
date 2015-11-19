@@ -387,6 +387,37 @@ private:
 	matrix_type concat_;
 };
 
+template<class A>
+class transpose {
+public:
+	typedef typename A::F F;
+	enum {
+		RowsAtCompileTime = A::ColsAtCompileTime,
+		ColsAtCompileTime = A::RowsAtCompileTime,
+		StorageOrder = A::StorageOrder
+	};
+
+public:
+	transpose(expression_ptr<derived_ptr<A>> && a) :
+		a_(std::move(a).transfer_cast()) {}
+
+	template<class Input,class Weights,class Fn>
+	auto operator()(const Input &input, const Weights &weights, Fn &&f) {
+		return a_(input, weights, [f = std::forward<decltype(f)>(f)] (auto &&i, auto &&w, auto &&a) {
+			return f(std::forward<decltype(i)>(i), std::forward<decltype(w)>(w),
+				std::forward<decltype(a)>(a).transpose());
+		});
+	}
+
+	template<class Derived,class Input,class Weights,class Grads>
+	void bprop(const Eigen::MatrixBase<Derived> &in, const Input &input, const Weights &weights, Grads &gradients) const {
+		a_.bprop(in.transpose(), input, weights, gradients);
+	}
+
+private:
+	derived_ptr<A> a_;
+};
+
 template<class A,class B>
 class rowwise_add {
 public:
@@ -878,6 +909,12 @@ template<class A>
 derived_ptr<expr::concat_zero<A>>
 concat_zero(expression_ptr<derived_ptr<A>> &&a) {
 	return std::make_unique<expr::concat_zero<A>>(std::move(a).transfer_cast());
+}
+
+template<class A>
+derived_ptr<expr::concat_zero<A>>
+transpose(expression_ptr<derived_ptr<A>> &&a) {
+	return std::make_unique<expr::transpose<A>>(std::move(a).transfer_cast());
 }
 
 template<class A,class B>
