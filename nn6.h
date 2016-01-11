@@ -24,6 +24,7 @@
 
 #include "nnet.h"
 #include "netops.h"
+#include "vocmap.h"
 
 namespace nn6 {
 
@@ -222,35 +223,6 @@ public:
 	}
 };
 
-struct vocmap {
-	typedef std::unordered_map<std::string,voc_id> map_type;
-
-	enum { UNKNOWN_WORD = 0 };
-
-	voc_id maxid;
-	map_type map;
-
-	vocmap() : maxid(1) {
-		map.insert(std::make_pair("<unk>", UNKNOWN_WORD));
-	}
-};
-
-voc_id voc_lookup(const std::string &word, vocmap &voc, bool extend = false) {
-	voc_id id;
-	vocmap::map_type::const_iterator it = voc.map.find(word);
-	if(it != voc.map.end()) 
-		id = it->second;
-	else {
-		if(extend) {
-			id = voc.maxid++;
-			voc.map.insert(std::make_pair(word, id));
-		} else
-			id = vocmap::UNKNOWN_WORD;
-	}
-
-	return id;
-}
-
 class classmap {
 public:
 	typedef std::unordered_map<std::string,int> map_type;
@@ -361,7 +333,7 @@ tagmap::tagmap(const std::string &file) {
 }
 
 template<class Float,bool TrainingMode>
-auto load_nn6(const std::string &file, const classmap &classes, vocmap &srcvocmap, vocmap &antvocmap, const tagmap &tags, int nlink = -1) {
+auto load_nn6(const std::string &file, const classmap &classes, vocmap::vocmap &srcvocmap, vocmap::vocmap &antvocmap, const tagmap &tags, int nlink = -1) {
 	typedef Eigen::SparseMatrix<Float,Eigen::RowMajor> sparse_matrix;
 	typedef Eigen::Matrix<Float,Eigen::Dynamic,Eigen::Dynamic,Eigen::RowMajor> matrix; // must be row-major because of resizing!
 	typedef Eigen::Matrix<int,Eigen::Dynamic,1> int_vector;
@@ -481,7 +453,7 @@ auto load_nn6(const std::string &file, const classmap &classes, vocmap &srcvocma
 						for(const std::string &t : tagset) {
 							const std::string PREFIX("lefff:");
 							v = voc_lookup(PREFIX + t, antvocmap, TrainingMode);
-							if(v != vocmap::UNKNOWN_WORD)
+							if(v != vocmap::vocmap::UNKNOWN_WORD)
 								ant_triplets.push_back(Eigen::Triplet<Float>(total_ant, v, 1.0 / nwords));
 						}
 					}
@@ -547,13 +519,13 @@ auto load_nn6(const std::string &file, const classmap &classes, vocmap &srcvocma
 }
 
 template<class Dataset>
-void dump_nn6_dataset(const std::string &outstem, const Dataset &dataset, const vocmap &srcvocmap, const vocmap &antvocmap) {
+void dump_nn6_dataset(const std::string &outstem, const Dataset &dataset, const vocmap::vocmap &srcvocmap, const vocmap::vocmap &antvocmap) {
 	Eigen::IOFormat dense_format(Eigen::FullPrecision, Eigen::DontAlignCols, " ", "\n", "", "", "", "\n");
 
 	// srcvoc
 	std::size_t srcvocsize = srcvocmap.map.size();
 	std::vector<std::string> voc(srcvocsize);
-	for(vocmap::map_type::const_iterator it = srcvocmap.map.begin(); it != srcvocmap.map.end(); ++it)
+	for(vocmap::vocmap::map_type::const_iterator it = srcvocmap.map.begin(); it != srcvocmap.map.end(); ++it)
 		voc[it->second] = it->first;
 	std::ofstream srcvoc_os((outstem + ".srcvoc").c_str());
 	for(std::size_t i = 0; i < srcvocsize; i++)
