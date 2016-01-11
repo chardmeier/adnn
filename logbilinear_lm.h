@@ -25,7 +25,10 @@
 
 #include "nnet.h"
 
-namespace nnet {
+namespace lblm {
+
+namespace fusion = boost::fusion;
+namespace mpl = boost::mpl;
 
 template<class Net,class InputMatrix,class TargetMatrix>
 class lblm_dataset;
@@ -38,7 +41,7 @@ typedef Eigen::Matrix<vocidx_type,Eigen::Dynamic,1> vocidx_vector;
 
 namespace detail_lblm {
 
-typedef boost::fusion::vector2<mat_size,vec_size> mat_with_bias;
+typedef boost::fusion::vector2<nnet::mat_size,nnet::vec_size> mat_with_bias;
 
 template<int Order,class Matrix>
 class ngram_data_type {
@@ -98,44 +101,37 @@ public:
 
 } // namespace detail_lblm
 
-template<int Order,class F>
+namespace idx {
+	typedef mpl::vector1_c<int,0> I_W3;
+	typedef mpl::vector1_c<int,1> I_W2;
+	typedef mpl::vector1_c<int,2> I_W1;
+
+	typedef mpl::vector1_c<int,0> W_W;
+	typedef mpl::vector1_c<int,1> W_C3;
+	typedef mpl::vector1_c<int,2> W_C2;
+	typedef mpl::vector1_c<int,3> W_C1;
+} // namespace idx
+
+template<int Float,class Spec,class Net>
 class lblm {
 private:
-	typedef boost::array<detail_lblm::mat_with_bias,Order> spec_type;
+	typedef Spec spec_type;
 	spec_type spec_;
-
-	std::size_t voc_size_, embed_size_;
+	netops::derived_ptr<Net> net_;
 
 public:
-	typedef F float_type;
+	typedef Float float_type;
+	typedef nnet::weights<Float,Spec> weight_type;
 
-	typedef lblm_dataset<lblm<Order,F>,vocidx_vector,sparse_matrix<F> > dataset;
+	template<class InputMatrix>
+	using input_type = detail_lblm::ngram_data_type<InputMatrix,3>;
+	template<class OutputMatrix>
+	using output_type = detail_lblm::ngram_data_type<InputMatrix,1>;
 
-	template<class Matrix>
-	using input_type = detail_lblm::ngram_data_type<Order,Matrix>;
-
-	template<class FF>
-	using basic_input_type = input_type<vocidx_vector>;
-
-	template<class Matrix>
-	using output_type = detail_lblm::ngram_data_type<1,Matrix>;
-
-	template<class FF>
-	using basic_output_type = output_type<std_matrix<FF> >;
-
-	template<class FF>
-	using weight_type = weights<FF,spec_type,std_array<FF> >;
+	typedef lblm_dataset<lblm<Float,Spec,Net>,vocidx_vector,sparse_matrix<Float> > dataset;
 	
-	lblm(size_t vocsize, size_t embedsize) :
-			voc_size_(vocsize), embed_size_(embedsize) {
-		using boost::fusion::at_c;
-		at_c<0>(spec_[0]) = mat_size(vocsize, embedsize);
-		at_c<1>(spec_[0]) = vec_size(vocsize);
-		for(int i = 1; i < Order; i++) {
-			at_c<0>(spec_[i]) = mat_size(embedsize, embedsize);
-			at_c<1>(spec_[i]) = vec_size(embedsize);
-		}
-	}
+	lblm(Spec &&spec, netops::expression_ptr<netops::derived_ptr<Net>> &&net) :
+		spec_(std::move(spec)), net_(std::move(net).transfer_cast()) {}
 
 	template<class FF,class InputMatrix>
 	auto operator()(const weight_type<FF> &W, const input_type<InputMatrix> &inp) const;
@@ -145,68 +141,40 @@ public:
 	}
 };
 
-namespace detail_lblm {
+template<class Float,class Inputs>
+auto make_lblm(const Inputs &input, std::size_t embedsize) {
+	auto ispec = nnet::data_to_spec(input);
 
-template<class Embed,class OutMatrix>
-class process_lblm {
-private:
-	typedef typename std::remove_reference<Embed>::type embed_type;
+	auto wspec = fusion::make_vector(
+		lweights<Float>(vocsize, embedsize),
+		lweights<Float>(embedsize, embedsize),
+		lweights<Float>(embedsize, embedsize),
+		lweights<Float>(embedsize, embedsize));
 
-	const embed_type &embed_;
-	OutMatrix &out_;
+	typedef nnet::weights<Float,decltype(wspec)> weights;
 
-	template<class T,class U>
-	using pair = boost::fusion::vector2<T,U>;
+	using namespace netops;
+	auto &&net = softmax_crossentropy(
+		(linear_layer<idx::C3>(wspec, linear_layer<idx::W>(wspec, input_matrix<idx::I3>(ispec))) +
+		linear_layer<idx::C2>(wspec, linear_layer<idx::W>(wspec, input_matrix<idx::I2>(ispec))) +
+		linear_layer<idx::C1>(wspec, linear_layer<idx::W>(wspec, input_matrix<idx::I1>(ispec))) *
+			transpose(weight_matrix<idx::W>(wspec))));
 
-public:
-	process_lblm(const embed_type &embed, OutMatrix &out) :
-		embed_(embed), out_(out) {}
-
-	template<class InpMat,class WMat,class BiasMat>
-	void operator()(const pair<InpMat,const pair<WMat,BiasMat>& > &mm) const {
-		using boost::fusion::at_c;
-		const InpMat &inp = at_c<0>(mm);
-		const WMat &w = at_c<0>(at_c<1>(mm));
-		const BiasMat &b = at_c<1>(at_c<1>(mm));
-		std_matrix<typename embed_type::Scalar> embedded_inp(inp.rows(), embed_.cols());
-		for(int i = 0; i < inp.rows(); i++)
-			embedded_inp.row(i) = embed_.row(inp(i, 0));
-		out_.noalias() += (embedded_inp * w).rowwise() + b;
-	}
-};
-
-} // namespace detail_lblm
-
-template<int Order,class A>
-template<class FF,class InputMatrix>
-auto lblm<Order,A>::operator()(const weight_type<FF> &w, const input_type<InputMatrix> &inp) const {
-	namespace fusion = boost::fusion;
-	const auto &wseq = w.sequence();
-	const auto &embed = fusion::at_c<0>(fusion::front(wseq));
-	const auto &embed_bias = fusion::at_c<1>(fusion::front(wseq));
-	std_matrix<FF> sum(inp.nitems(), embed_size_);
-	sum.setZero();
-			std::chrono::system_clock::time_point t1 = std::chrono::system_clock::now();
-	fusion::for_each(fusion::zip(inp.sequence(), fusion::pop_front(wseq)),
-		detail_lblm::process_lblm<decltype(embed),decltype(sum)>(embed, sum));
-			std::chrono::system_clock::time_point t2 = std::chrono::system_clock::now();
-	std_matrix<FF> outmat = invoke_activation<softmax>((sum * embed.transpose()).rowwise() + embed_bias);
-			std::chrono::system_clock::time_point t3 = std::chrono::system_clock::now();
-			std::cerr << "### " <<
-				std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() << "us - " <<
-				std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2).count() << "us\n";
-	return output_type<std_matrix<FF> >(fusion::make_vector(outmat));
+	typedef typename std::remove_reference<decltype(net)>::type::expr_type net_type;
+	return lblm<Float,decltype(wspec),net_type>(std::move(wspec), std::move(net));
 }
 
-struct lblm_energy {
-	template<class T1,class T2>
-	struct functor {
-		typedef typename T1::float_type result_type;
-		result_type operator()(const T1 &output, const T2 &targets) const {
-			return -(output.template at<0>() * targets.template at<0>().transpose()).sum();
-		}
-	};
-};
+template<int Order,class A>
+template<class InputType>
+auto lblm<Order,A>::operator()(const weight_type &w, const InputType &inp) const {
+	return net_.fprop(input, weights.sequence());
+}
+
+template<int Order,class A>
+template<class InputType,class OutputType>
+auto lblm<Order,A>::bprop(const InputType &input, const OutputType &targets, const weight_type &weights, weight_type &grads) {
+	return net_.bprop_loss(targets, input, weights.sequence(), grads.sequence());
+}
 
 template<class Net,class InputMatrix,class TargetMatrix>
 class lblm_batch_iterator;
@@ -276,6 +244,35 @@ template<class Net,class InputMatrix,class TargetMatrix,class InputSequence,clas
 lblm_dataset<Net,InputMatrix,TargetMatrix>
 make_lblm_dataset(InputSequence inputs, TargetSequence targets) {
 	return lblm_dataset<Net,InputMatrix,TargetMatrix>(inputs, targets);
+}
+
+template<class Float,bool Extend>
+auto load_lblm(const std::string &infile, vocmap::vocmap &voc) {
+	const int ORDER = 3;
+	const vocidx_type BOS = lookup_word("<s>");
+
+	boost::array<std::vector<Eigen::Triplet<Float>>,ORDER> words;
+
+	std::ifstream in(infile.c_str());
+	for(std::string line; getline(in, line); ) {
+		std::istringstream ls(line + " </s>");
+		std::deque<vocidx_type> ngram(ORDER, BOS);
+		for(std::string word; getline(ls, word, ' '); ) {
+			ngram.pop_front();
+			ngram.push_back(voc_lookup(word, voc, Extend));
+			for(int i = 0; i < ORDER; i++)
+				words[i].push_back(ngram[i]);
+		}
+	}
+
+	typedef Eigen::SparseMatrix<Float,Eigen::RowMajor> wordinput_type;
+	boost::array<wordinput_type,ORDER - 1> history;
+	for(int i = 0; i < ORDER - 1; i++)
+		history[i].setFromTriplets(words[i]);
+	wordinput_type target;
+	target.setFromTriplets(words[ORDER - 1]);
+	
+	return make_lblm_dataset(history, target);
 }
 
 namespace detail_lblm {
@@ -363,12 +360,12 @@ struct submatrix_functor {
 
 	template<class Derived>
 	auto operator()(const Eigen::MatrixBase<Derived> &inpmat) const {
-		return inpmat.middleRows(from_, N_);
+		return inpmat.middleRows(from_, N_).eval();
 	}
 
 	template<class Derived>
 	auto operator()(const Eigen::SparseMatrixBase<Derived> &inpmat) const {
-		return inpmat.middleRows(from_, N_);
+		return inpmat.middleRows(from_, N_).eval();
 	}
 };
 
