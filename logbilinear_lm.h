@@ -109,6 +109,7 @@ namespace idx {
 	typedef mpl::vector1_c<int,2> I_W1;
 
 	typedef mpl::vector1_c<int,0> W_W;
+	typedef mpl::vector2_c<int,0,0> W_Wmat;
 	typedef mpl::vector1_c<int,1> W_C3;
 	typedef mpl::vector1_c<int,2> W_C2;
 	typedef mpl::vector1_c<int,3> W_C1;
@@ -167,7 +168,7 @@ auto make_lblm(const Inputs &input, std::size_t vocsize, std::size_t embedsize) 
 		(linear_layer<idx::W_C3>(wspec, linear_layer<idx::W_W>(wspec, input_matrix<idx::I_W3>(ispec))) +
 		linear_layer<idx::W_C2>(wspec, linear_layer<idx::W_W>(wspec, input_matrix<idx::I_W2>(ispec))) +
 		linear_layer<idx::W_C1>(wspec, linear_layer<idx::W_W>(wspec, input_matrix<idx::I_W1>(ispec))) *
-			transpose(weight_matrix<idx::W_W>(wspec))));
+			transpose(weight_matrix<idx::W_Wmat>(wspec))));
 
 	typedef typename std::remove_reference<decltype(net)>::type::expr_type net_type;
 	return lblm<Float,decltype(wspec),net_type>(std::move(wspec), std::move(net));
