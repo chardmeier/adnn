@@ -20,6 +20,7 @@
 #include <boost/fusion/include/vector.hpp>
 #include <boost/fusion/include/zip.hpp>
 #include <boost/iterator/iterator_facade.hpp>
+#include <boost/mpl/vector_c.hpp>
 
 #include <Eigen/SparseCore>
 
