@@ -5,30 +5,40 @@
 
 namespace vocmap {
 
-struct vocmap {
-	typedef std::unordered_map<std::string,voc_id> map_type;
+typedef unsigned long voc_id;
 
-	enum { UNKNOWN_WORD = 0 };
+class vocmap {
+private:
+	typedef std::unordered_map<std::string,voc_id> map_type;
 
 	voc_id maxid;
 	map_type map;
 
+public:
+	enum { UNKNOWN_WORD = 0 };
+
 	vocmap() : maxid(1) {
 		map.insert(std::make_pair("<unk>", UNKNOWN_WORD));
 	}
+
+	voc_id lookup(const std::string &word, bool extend = false);
+
+	std::size_t size() const {
+		return maxid;
+	}
 };
 
-voc_id voc_lookup(const std::string &word, vocmap &voc, bool extend = false) {
+voc_id vocmap::lookup(const std::string &word, bool extend) {
 	voc_id id;
-	vocmap::map_type::const_iterator it = voc.map.find(word);
-	if(it != voc.map.end()) 
+	vocmap::map_type::const_iterator it = map.find(word);
+	if(it != map.end()) 
 		id = it->second;
 	else {
 		if(extend) {
-			id = voc.maxid++;
-			voc.map.insert(std::make_pair(word, id));
+			id = maxid++;
+			map.insert(std::make_pair(word, id));
 		} else
-			id = vocmap::UNKNOWN_WORD;
+			id = UNKNOWN_WORD;
 	}
 
 	return id;

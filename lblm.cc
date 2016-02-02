@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
 	auto testset = lblm::load_lblm<double,false>(test_lblm, voc);
 	std::cerr << "Data loaded." << std::endl;
 
-	auto net = lblm::make_lblm<double>(train.input(), size_embed);
+	auto net = lblm::make_lblm<double>(train.inputs(), voc.size(), size_embed);
 	typedef decltype(net) net_type;
 
 	nnet::nnopt<net_type> opt(net, params.get_child("lblm.nnopt"));
