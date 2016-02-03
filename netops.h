@@ -912,7 +912,7 @@ concat_zero(expression_ptr<derived_ptr<A>> &&a) {
 }
 
 template<class A>
-derived_ptr<expr::concat_zero<A>>
+derived_ptr<expr::transpose<A>>
 transpose(expression_ptr<derived_ptr<A>> &&a) {
 	return std::make_unique<expr::transpose<A>>(std::move(a).transfer_cast());
 }
