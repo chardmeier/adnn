@@ -183,7 +183,7 @@ auto lblm<Float,Spec,Net>::operator()(const weight_type &weights, const InputTyp
 template<class Float,class Spec,class Net>
 template<class InputType,class OutputType>
 auto lblm<Float,Spec,Net>::bprop(const InputType &input, const OutputType &targets, const weight_type &weights, weight_type &grads) {
-	return net_.bprop_loss(targets, input, weights.sequence(), grads.sequence());
+	return net_.bprop_loss(targets.matrix(), input, weights.sequence(), grads.sequence());
 }
 
 template<class InputMatrix,class TargetMatrix>
@@ -211,6 +211,10 @@ public:
 	template<class InputSequence,class TargetSequence>
 	lblm_dataset(const InputSequence &inputs, const TargetSequence &targets) :
 		inputs_(inputs), targets_(targets) {}
+
+	auto sequence() const {
+		return inputs_.sequence();
+	}
 
 	const input_type &inputs() const {
 		return inputs_;
@@ -387,7 +391,7 @@ auto lblm_dataset<InputMatrix,TargetMatrix>::subset(std::size_t from, std::size_
 	to = std::min(to, nitems());
 	detail_lblm::submatrix_functor submat(from, to);
 	using boost::fusion::transform;
-	return make_lblm_dataset<InputMatrix,TargetMatrix>(transform(inputs_.sequence(), submat), transform(targets_.sequence(), submat));
+	return make_lblm_dataset(transform(inputs_.sequence(), submat), transform(targets_.sequence(), submat));
 }
 
 template<class InputMatrix,class TargetMatrix>
@@ -395,7 +399,7 @@ auto lblm_dataset<InputMatrix,TargetMatrix>::subset(std::size_t from, std::size_
 	to = std::min(to, nitems());
 	detail_lblm::submatrix_functor submat(from, to);
 	using boost::fusion::transform;
-	return make_lblm_dataset<InputMatrix,TargetMatrix>(transform(inputs_.sequence(), submat), transform(targets_.sequence(), submat));
+	return make_lblm_dataset(transform(inputs_.sequence(), submat), transform(targets_.sequence(), submat));
 }
 
 } // namespace nnet
