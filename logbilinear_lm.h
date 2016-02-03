@@ -140,6 +140,11 @@ public:
 	template<class InputType,class OutputType>
 	auto bprop(const InputType &input, const OutputType &targets, const weight_type &weights, weight_type &grads);
 
+	template<class OutputType,class TargetType>
+	float_type error(const OutputType &output, const TargetType &targets) const {
+		throw 0; // TODO: FIX THIS!
+	}
+
 	const spec_type &spec() const {
 		return spec_;
 	}
@@ -286,8 +291,11 @@ auto load_lblm(const std::string &infile, vocmap::vocmap &voc) {
 		history[i].setFromTriplets(words[i].begin(), words[i].end());
 	wordinput_type target;
 	target.setFromTriplets(words.back().begin(), words.back().end());
+
+	// the target matrix must be dense
+	Eigen::Matrix<Float,Eigen::Dynamic,Eigen::Dynamic> target_dense(target);
 	
-	return make_lblm_dataset(history, fusion::make_vector(target));
+	return make_lblm_dataset(history, fusion::make_vector(target_dense));
 }
 
 namespace detail_lblm {
