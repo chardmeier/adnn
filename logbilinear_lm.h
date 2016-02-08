@@ -32,6 +32,8 @@
 
 namespace lblm {
 
+enum { ORDER = 4 };
+
 namespace fusion = boost::fusion;
 namespace mpl = boost::mpl;
 
@@ -182,8 +184,8 @@ auto make_lblm(const Inputs &input, std::size_t vocsize, std::size_t embedsize) 
 	auto &&net = softmax_crossentropy(
 		(linear_layer<idx::W_C3>(wspec, linear_layer<idx::W_W>(wspec, input_matrix<idx::I_W3>(ispec))) +
 		linear_layer<idx::W_C2>(wspec, linear_layer<idx::W_W>(wspec, input_matrix<idx::I_W2>(ispec))) +
-		linear_layer<idx::W_C1>(wspec, linear_layer<idx::W_W>(wspec, input_matrix<idx::I_W1>(ispec))) *
-			transpose(weight_matrix<idx::W_Wmat>(wspec))));
+		linear_layer<idx::W_C1>(wspec, linear_layer<idx::W_W>(wspec, input_matrix<idx::I_W1>(ispec)))) *
+			transpose(weight_matrix<idx::W_Wmat>(wspec)));
 
 	typedef typename std::remove_reference<decltype(net)>::type::expr_type net_type;
 	return lblm<Float,decltype(wspec),net_type>(std::move(wspec), std::move(net));
@@ -209,7 +211,7 @@ class lblm_dataset {
 public:
 	typedef std::unordered_map<std::string,vocmap::voc_id> vocmap_type;
 
-	typedef detail_lblm::ngram_data_type<3,InputMatrix> input_type;
+	typedef detail_lblm::ngram_data_type<ORDER - 1,InputMatrix> input_type;
 	typedef detail_lblm::ngram_data_type<1,TargetMatrix> output_type;
 	
 private:
@@ -276,7 +278,6 @@ auto make_lblm_dataset(InputSequence inputs, TargetSequence targets) {
 
 template<class Float,bool Extend>
 auto load_lblm(const std::string &infile, vocmap::vocmap &voc) {
-	const int ORDER = 3;
 	const vocmap::voc_id BOS = voc.lookup("<s>", Extend);
 
 	typedef Eigen::Triplet<Float> triplet;
@@ -297,9 +298,11 @@ auto load_lblm(const std::string &infile, vocmap::vocmap &voc) {
 
 	typedef Eigen::SparseMatrix<Float,Eigen::RowMajor> wordinput_type;
 	boost::array<wordinput_type,ORDER - 1> history;
-	for(int i = 0; i < ORDER - 1; i++)
+	for(int i = 0; i < ORDER - 1; i++) {
+		history[i].resize(idx, voc.size());
 		history[i].setFromTriplets(words[i].begin(), words[i].end());
-	wordinput_type target;
+	}
+	wordinput_type target(idx, voc.size());
 	target.setFromTriplets(words.back().begin(), words.back().end());
 
 	// the target matrix must be dense
