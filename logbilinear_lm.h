@@ -91,6 +91,16 @@ public:
 		return sequence_[0];
 	}
 
+	template<int N = Order>
+	auto array(typename std::enable_if<N==1>::type* = nullptr) {
+		return sequence_[0].array();
+	}
+
+	template<int N = Order>
+	auto array(typename std::enable_if<N==1>::type* = nullptr) const {
+		return sequence_[0].array();
+	}
+
 	std::size_t nitems() const {
 		return sequence_[0].rows();
 	}
@@ -142,7 +152,7 @@ public:
 
 	template<class OutputType,class TargetType>
 	float_type error(const OutputType &output, const TargetType &targets) const {
-		throw 0; // TODO: FIX THIS!
+		return -(targets.array() * output.array().log()).sum() / output.rows();
 	}
 
 	const spec_type &spec() const {
