@@ -1,5 +1,5 @@
-OPT = -O3 -march=native -ffast-math # -fopenmp
-#OPT =
+#OPT = -O3 -march=native -ffast-math # -fopenmp
+OPT =
 
 #CXX = icpc
 #CXX_FLAGS = -std=c++14 -DBOOST_RESULT_OF_USE_DECLTYPE -Wall -Wno-comment
@@ -56,4 +56,4 @@ nnopt:	3layer.cpp $(NNET_HEADERS)
 	$(CXX) $(CXX_FLAGS) -o 3layer -g $(OPT) -Wall -Wno-unused-local-typedefs -I$(BOOST) -I$(EIGEN) 3layer.cpp -lm
 
 clean:
-	rm -f lmtest nnopt netops ptrtst gradient_check nn6_gradient_check nn6
+	rm -f lmtest nnopt netops ptrtst gradient_check nn6_gradient_check nn6 lblm
