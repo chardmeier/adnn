@@ -21,6 +21,8 @@ EIGEN = $(HOME)/eigen-3.2.4
 
 NNET_HEADERS = nnet.h nnopt.h mlp.h logbilinear_lm.h nn6.h nn6-dev.h
 
+compile: nn6
+
 lblm: lblm.cc netops.h $(NNET_HEADERS)
 	$(CXX) $(CXX_FLAGS) $(OPT) $(MKL) -o lblm -g -I$(BOOST) -I$(EIGEN) lblm.cc -lm
 
