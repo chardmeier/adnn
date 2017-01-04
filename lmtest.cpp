@@ -127,11 +127,11 @@ int main(int argc, char **argv) {
 		suffix = argv[1];
 
 	const int ngram_order = 3;
-	typedef nnet::lblm<ngram_order,adept::Real> net_type;
+	typedef nnet::lblm<ngram_order,float> net_type;
 
-	net_type::dataset trainset = lblm_load_data<ngram_order,adept::Real>((std::string("train.") + suffix).c_str());
-	net_type::dataset valset = lblm_load_data<ngram_order,adept::Real>((std::string("val.") + suffix).c_str(), trainset.vocmap());
-	net_type::dataset testset = lblm_load_data<ngram_order,adept::Real>((std::string("test.") + suffix).c_str(), trainset.vocmap());
+	net_type::dataset trainset = lblm_load_data<ngram_order,float>((std::string("train.") + suffix).c_str());
+	net_type::dataset valset = lblm_load_data<ngram_order,float>((std::string("val.") + suffix).c_str(), trainset.vocmap());
+	net_type::dataset testset = lblm_load_data<ngram_order,float>((std::string("test.") + suffix).c_str(), trainset.vocmap());
 	
 	net_type net(trainset.vocmap().size(), 80);
 	nnet::crossentropy_loss loss;
