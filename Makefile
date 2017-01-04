@@ -50,8 +50,8 @@ ptrtst: ptrtst.cc
 lmtest:	lmtest.cpp $(NNET_HEADERS)
 	$(CXX) $(CXX_FLAGS) $(OPT) $(MKL) -o lmtest -g $(OPT) -I$(BOOST) -I$(EIGEN) lmtest.cpp -lm
 
-nnopt:	3layer.cpp $(NNET_HEADERS)
-	$(CXX) $(CXX_FLAGS) -o 3layer -g $(OPT) -Wall -Wno-unused-local-typedefs -I$(BOOST) -I$(EIGEN) 3layer.cpp -lm
+3layer:	3layer.cc $(NNET_HEADERS)
+	$(CXX) $(CXX_FLAGS) -o 3layer -g $(OPT) -Wall -Wno-unused-local-typedefs -I$(BOOST) -I$(EIGEN) 3layer.cc -lm
 
 clean:
-	rm -f lmtest nnopt netops ptrtst gradient_check nn6_gradient_check nn6 lblm
+	rm -f lmtest 3layer netops ptrtst gradient_check nn6_gradient_check nn6 lblm
